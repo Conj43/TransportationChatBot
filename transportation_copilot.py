@@ -281,7 +281,7 @@ if st.session_state.db_path is not None:
         history_messages_key="chat_history",
     )
 
-    config = {"configurable": {"session_id": session_id}}
+    
     
     if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
         st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
@@ -297,6 +297,7 @@ if st.session_state.db_path is not None:
 
         with st.chat_message("assistant", avatar="🤖"):
             st_cb = StreamlitCallbackHandler(st.container())
+            config = {"configurable": {"session_id": session_id}, "callbacks": [st_cb]}
             response = agent_with_chat_history.invoke({'input': user_query}, config=config)
             st.session_state.messages.append({"role": "assistant", "content": response, "chat_history": agent_with_chat_history.get_session_history(session_id)})
             st.write(response)
