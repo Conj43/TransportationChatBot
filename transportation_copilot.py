@@ -27,7 +27,7 @@ from langchain_core.prompts import (
     PromptTemplate,
     SystemMessagePromptTemplate,
 )
-
+import json
 
 
 # example user input to give to llm
@@ -287,7 +287,11 @@ if st.session_state.db_path is not None:
         st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
     for msg in st.session_state.messages:
-        st.chat_message(msg["role"], avatar="🤖").write(msg["content"])
+        if msg["role"] == "assistant":
+            avatar = "🤖"
+        else:
+            avatar = "💬"
+        st.chat_message(msg["role"], avatar=avatar).write(msg["content"])
 
     user_query = st.chat_input(placeholder="Ask me anything!")
 
@@ -299,7 +303,10 @@ if st.session_state.db_path is not None:
             st_cb = StreamlitCallbackHandler(st.container())
             config = {"configurable": {"session_id": session_id}, "callbacks": [st_cb]}
             response = agent_with_chat_history.invoke({'input': user_query}, config=config)
-            st.session_state.messages.append({"role": "assistant", "content": response, "chat_history": agent_with_chat_history.get_session_history(session_id)})
+            response = response.get("output", "")
+            response = json.dumps(response, indent=4)
+            response = response.strip('"')
+            st.session_state.messages.append({"role": "assistant", "content": response})
             st.write(response)
 
 
