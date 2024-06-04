@@ -76,6 +76,10 @@ examples = [
         "input": "Show the top 20 counties with the highest proportion of fatal accidents.",
         "query": "SELECT COUNTY_NAM as county, CAST(SUM(CASE WHEN ACC_SVRTY_ = 'FATAL' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) AS fatality_rate FROM accidents GROUP BY COUNTY_NAM ORDER BY fatality_rate DESC LIMIT 20;",
     },
+    {
+        "input": "How many accidents occurred in St Louis County?",
+        "query": "SELECT COUNT(*) AS accident_count FROM accidents WHERE COUNTY_NAM = 'ST. LOUIS'",
+    },
 ]
 
 
@@ -149,9 +153,9 @@ if st.session_state.db_path is not None:
 
     DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
-    If you need to filter on a proper noun, you must ALWAYS first look up the filter value using the "search_proper_nouns" tool! 
+    If you think a proper noun is mispelled, you must ALWAYS first look up the filter value using the "search_distinct_text" tool! 
 
-    If the question does not seem related to the database, just return "I don't know" as the answer.
+    If the question does not seem related to the database, return "I'm not sure." as the answer.
 
     Here are some examples of user inputs and their corresponding SQL queries:"""
 
@@ -203,8 +207,8 @@ if st.session_state.db_path is not None:
 
     vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings()) # embeds our unique text values
     retriever = vector_db.as_retriever(search_kwargs={"k": 5})  # define retriever to our vector db of embedded unique text values
-    description = """Use to look up values to filter on. Input is an approximate spelling of the proper noun, output is \
-    valid proper nouns. Use the noun most similar to the search.""" # define a description to help llm think
+    description = """Use to look up values to filter on. Input is an approximate spelling of a piece of text, output is \
+    valid spelling of text. Use the text most similar to the search.""" # define a description to help llm think
 
 
 
@@ -233,13 +237,13 @@ if st.session_state.db_path is not None:
 
     retriever_tool = create_retriever_tool(
         retriever,
-        name="search_proper_nouns",
+        name="search_distinct_text",
         description=description,
     )
 
     tools = [
         Tool(
-            name="search_proper_nouns",
+            name="search_distinct_text",
             func=retriever_tool,
             description=description
         )
@@ -302,6 +306,7 @@ if st.session_state.db_path is not None:
         with st.chat_message("assistant", avatar="🤖"):
             st_cb = StreamlitCallbackHandler(st.container())
             config = {"configurable": {"session_id": session_id}, "callbacks": [st_cb]}
+            print(st.session_state.store)
             response = agent_with_chat_history.invoke({'input': user_query}, config=config)
             response = response.get("output", "")
             response = json.dumps(response, indent=4)
