@@ -13,10 +13,13 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.example_selectors import SemanticSimilarityExampleSelector
 from langchain_openai import OpenAIEmbeddings
 from langchain.agents.agent_toolkits import create_retriever_tool
-from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
 import sqlite3
-
+from langchain.agents import Tool
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     FewShotPromptTemplate,
@@ -91,7 +94,7 @@ llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0)
 st.sidebar.title("Upload a Database")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
 
-if "db.path" is not st.session_state:
+if "db.path" != st.session_state:
     st.session_state.db_path = None
 
 if uploaded_file is not None:
@@ -104,7 +107,8 @@ if uploaded_file is not None:
 
 if st.session_state.db_path is not None:
     db = SQLDatabase.from_uri(f'sqlite:///{st.session_state.db_path}')
-    toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+    conn = sqlite3.connect(st.session_state.db_path)
+
     example_selector = SemanticSimilarityExampleSelector.from_examples(
         examples,
         OpenAIEmbeddings(),
@@ -112,6 +116,10 @@ if st.session_state.db_path is not None:
         k=5,
         input_keys=["input"],
     )
+
+    if 'store' not in st.session_state:
+            st.session_state.store = {}
+
 # db = SQLDatabase.from_uri('sqlite:///new_accident.db')
 
 
@@ -151,7 +159,7 @@ if st.session_state.db_path is not None:
 
 
 
-    conn = sqlite3.connect("new_accident.db")
+    
     c = conn.cursor()
 
     # method to get all column names
@@ -197,15 +205,6 @@ if st.session_state.db_path is not None:
     retriever = vector_db.as_retriever(search_kwargs={"k": 5})  # define retriever to our vector db of embedded unique text values
     description = """Use to look up values to filter on. Input is an approximate spelling of the proper noun, output is \
     valid proper nouns. Use the noun most similar to the search.""" # define a description to help llm think
-    #initalize retreiver tool to help with misspellings or unique works in our db
-    retriever_tool = create_retriever_tool(
-        retriever,
-        name="search_proper_nouns",
-        description=description,
-    )
-
-
-
 
 
 
@@ -216,7 +215,7 @@ if st.session_state.db_path is not None:
         example_prompt=PromptTemplate.from_template(
             "User input: {input}\nSQL query: {query}"
         ),
-        input_variables=["input", "dialect", "top_k"],
+        input_variables=["input", "dialect", "top_k", "chat_history"],
         prefix=system_prefix,
         suffix="",
     )
@@ -225,10 +224,33 @@ if st.session_state.db_path is not None:
     full_prompt = ChatPromptTemplate.from_messages(
         [
             SystemMessagePromptTemplate(prompt=few_shot_prompt),
+            MessagesPlaceholder(variable_name="chat_history"),
             ("human", "{input}"),
             MessagesPlaceholder("agent_scratchpad"),
         ]
     )
+
+
+    retriever_tool = create_retriever_tool(
+        retriever,
+        name="search_proper_nouns",
+        description=description,
+    )
+
+    tools = [
+        Tool(
+            name="search_proper_nouns",
+            func=retriever_tool,
+            description=description
+        )
+    ]
+
+
+
+    def get_session_history(session_id: str) -> BaseChatMessageHistory:
+        if session_id not in st.session_state.store:
+            st.session_state.store[session_id] = ChatMessageHistory()
+        return st.session_state.store[session_id]
 
     # initilaize agent without retriever tool
     # agent = create_sql_agent(
@@ -243,32 +265,42 @@ if st.session_state.db_path is not None:
     agent = create_sql_agent(
         llm=llm,
         db=db,
-        extra_tools=[retriever_tool],
         prompt=full_prompt,
         verbose=True,
         agent_type="openai-tools",
+        tools=tools,
     )
 
-# aiimg = st.image('imgs/assistant.png')
-# userimg = st.image('imgs/user.png')
+    session_id="123"
+    message_history = ChatMessageHistory()
 
-if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
-    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+    agent_with_chat_history = RunnableWithMessageHistory(
+        agent,
+        get_session_history,
+        input_messages_key="input",
+        history_messages_key="chat_history",
+    )
 
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"], avatar="🤖").write(msg["content"])
+    config = {"configurable": {"session_id": session_id}}
+    
+    if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
+        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
-user_query = st.chat_input(placeholder="Ask me anything!")
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"], avatar="🤖").write(msg["content"])
 
-if user_query:
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    st.chat_message("user",avatar="💬").write(user_query)
+    user_query = st.chat_input(placeholder="Ask me anything!")
 
-    with st.chat_message("assistant", avatar="🤖"):
-        st_cb = StreamlitCallbackHandler(st.container())
-        response = agent.run(user_query, callbacks = [st_cb])
-        st.session_state.messages.append({"role": "assistant", "content": response})
-        st.write(response)
+    if user_query:
+        st.session_state.messages.append({"role": "user", "content": user_query})
+        st.chat_message("user",avatar="💬").write(user_query)
+
+        with st.chat_message("assistant", avatar="🤖"):
+            st_cb = StreamlitCallbackHandler(st.container())
+            response = agent_with_chat_history.invoke({'input': user_query}, config=config)
+            st.session_state.messages.append({"role": "assistant", "content": response, "chat_history": agent_with_chat_history.get_session_history(session_id)})
+            st.write(response)
 
 
 
+# response = agent.run(user_query, callbacks = [st_cb])

@@ -6,6 +6,9 @@ from langchain_core.example_selectors import SemanticSimilarityExampleSelector
 from langchain_openai import OpenAIEmbeddings
 from langchain.agents.agent_toolkits import create_retriever_tool
 import sqlite3
+from langchain.agents import Tool
+from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_core.messages import AIMessage, HumanMessage
 
 from langchain_core.prompts import (
     ChatPromptTemplate,
@@ -91,10 +94,14 @@ You MUST double check your query before executing it. If you get an error while 
 
 DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
-If the question does not seem related to the database, just return "I don't know" as the answer.
+If the question does not seem related to the database then return "I don't know" as the answer.
 
 Here are some examples of user inputs and their corresponding SQL queries:"""
 
+# If the question does not seem related to the database, check the chat history. If the question is not related to the database 
+# or the chat history return "I don't know" as the answer.
+
+# If the question does not seem related to the chat history, and it is not related to the database, return "I'm not sure. Sorry!"
 
 # formats propmt into correct format, and adds our example inputs and outputs
 few_shot_prompt = FewShotPromptTemplate(
@@ -102,7 +109,7 @@ few_shot_prompt = FewShotPromptTemplate(
     example_prompt=PromptTemplate.from_template(
         "User input: {input}\nSQL query: {query}"
     ),
-    input_variables=["input", "dialect", "top_k"],
+    input_variables=["input", "dialect", "top_k", "chat_history"],
     prefix=system_prefix,
     suffix="",
 )
@@ -111,6 +118,7 @@ few_shot_prompt = FewShotPromptTemplate(
 full_prompt = ChatPromptTemplate.from_messages(
     [
         SystemMessagePromptTemplate(prompt=few_shot_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder("agent_scratchpad"),
     ]
@@ -122,69 +130,79 @@ prompt_val = full_prompt.invoke(
         "input": "How many accidents happened in Boone County?",
         "top_k": 5,
         "dialect": "SQLite",
+        "chat_history": [],
         "agent_scratchpad": [],
     }
 )
 # print(prompt_val.to_string())
 
-# conn = sqlite3.connect("new_accident.db")
-# c = conn.cursor()
+conn = sqlite3.connect("new_accident.db")
+c = conn.cursor()
 
 
-# def get_all_col_names():
-#     c.execute("SELECT name FROM sqlite_master WHERE type='table';")
-#     table_names = c.fetchall()
-#     table_names = [name[0] for name in table_names]
+def get_all_col_names():
+    c.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    table_names = c.fetchall()
+    table_names = [name[0] for name in table_names]
     
-#     all_columns = []
-#     for name in table_names:
-#         c.execute(f"PRAGMA table_info({name})")
-#         columns_info = c.fetchall()
-#         for col_info in columns_info:
-#             all_columns.append((name, col_info[1], col_info[2]))  # (table_name, column_name, column_type)
+    all_columns = []
+    for name in table_names:
+        c.execute(f"PRAGMA table_info({name})")
+        columns_info = c.fetchall()
+        for col_info in columns_info:
+            all_columns.append((name, col_info[1], col_info[2]))  # (table_name, column_name, column_type)
     
-#     return all_columns
+    return all_columns
 
-# def collect_text_column_values():
-#     text_column_values = {}
+def collect_text_column_values():
+    text_column_values = {}
 
-#     # Get all column names and their data types
-#     all_columns = get_all_col_names()
+    # Get all column names and their data types
+    all_columns = get_all_col_names()
 
-#     for table_name, column_name, column_type in all_columns:
-#         # Check if the column type is TEXT
-#         if column_type.upper() == 'TEXT':
-#             # Fetch all unique values from this text column
-#             c.execute(f"SELECT DISTINCT {column_name} FROM {table_name}")
-#             unique_values = c.fetchall()
-#             unique_values = {value[0] for value in unique_values if value[0] is not None}
-#             text_column_values[f"{table_name}.{column_name}"] = unique_values
+    for table_name, column_name, column_type in all_columns:
+        # Check if the column type is TEXT
+        if column_type.upper() == 'TEXT':
+            # Fetch all unique values from this text column
+            c.execute(f"SELECT DISTINCT {column_name} FROM {table_name}")
+            unique_values = c.fetchall()
+            unique_values = {value[0] for value in unique_values if value[0] is not None}
+            text_column_values[f"{table_name}.{column_name}"] = unique_values
 
-#     return text_column_values
+    return text_column_values
 
-# # call function to obtain all text values and define them
-# text_values = collect_text_column_values()
+# call function to obtain all text values and define them
+text_values = collect_text_column_values()
 
-# conn.close() # close connection
+conn.close() # close connection
 
-# vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
-# retriever = vector_db.as_retriever(search_kwargs={"k": 5})
-# description = """Use to look up values to filter on. Input is an approximate spelling of the proper noun, output is \
-# valid proper nouns. Use the noun most similar to the search."""
+vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
+retriever = vector_db.as_retriever(search_kwargs={"k": 5})
+description = """Use to look up values to filter on. Input is an approximate spelling of the proper noun, output is \
+valid proper nouns. Use the noun most similar to the search."""
+
+
 # retriever_tool = create_retriever_tool(
 #     retriever,
 #     name="search_proper_nouns",
 #     description=description,
 # )
 
-# initalize sql agent without retriever tool
-agent = create_sql_agent(
-    llm=llm,
-    db=db,
-    prompt=full_prompt,
-    verbose=True,
-    agent_type="openai-tools",
+retriever_tool = create_retriever_tool(
+    retriever,
+    name="search_proper_nouns",
+    description=description,
 )
+
+tools = [
+    Tool(
+        name="search_proper_nouns",
+        func=retriever_tool,
+        description=description
+    )
+]
+
+
 
 
 # initalize sql agent with retriever tool
@@ -199,8 +217,77 @@ agent = create_sql_agent(
 
 
 
+
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
+
+
+from langchain_core.chat_history import BaseChatMessageHistory
+
+
+store = {}
+
+
+def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    if session_id not in store:
+        store[session_id] = ChatMessageHistory()
+    return store[session_id]
+
+
+
+# initalize sql agent without retriever tool
+agent = create_sql_agent(
+    llm=llm,
+    db=db,
+    prompt=full_prompt,
+    verbose=True,
+    agent_type="openai-tools",
+    tools=tools,
+)
+message_history = ChatMessageHistory()
+
+agent_with_chat_history = RunnableWithMessageHistory(
+    agent,
+    get_session_history,
+    input_messages_key="input",
+    history_messages_key="chat_history",
+)
+
+# This is where we configure the session id
+config = {"configurable": {"session_id": "1"}}
+
+config_two = {"configurable": {"session_id": "2"}}
+
+response_one = agent_with_chat_history.invoke(
+    {'input': 'How many accidents occurred during morning peak hours?'},
+    config=config
+)
+print(response_one)
+
+
+response_two = agent_with_chat_history.invoke(
+    {'input': 'What was that number again?'},
+    config=config
+)
+print(response_two)
+
+response_three = agent_with_chat_history.invoke(
+    {'input': 'What was that number again?'},
+    config=config_two
+)
+print(response_three)
+
+# agent_with_chat_history.get_graph().print_ascii()
+
+
+
+
+
 # provide input and get back output from model
-agent.invoke({"input": "How many crashes happened where inclement weather played a factor?"})
+# agent.invoke({"input": "How many crashes happened where inclement weather played a factor?"})
+
+
+
 
 
 
