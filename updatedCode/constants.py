@@ -43,7 +43,7 @@ EXAMPLES = [
         "query": "SELECT ACC_SVRTY_ as injury_severity, RD_SURF_CO as road_surface_condition FROM accidents WHERE MHTD_ACC_T LIKE '%RAN OFF%' OR MHTD_ACC_T LIKE '%OVERTURN%';",
     },
     {
-        "input": "Show the top 20 counties with the highest proportion of fatal accidents.",
+        "input": "Provide me with the top 20 counties with the highest proportion of fatal accidents.",
         "query": "SELECT COUNTY_NAM as county, CAST(SUM(CASE WHEN ACC_SVRTY_ = 'FATAL' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*) AS fatality_rate FROM accidents GROUP BY COUNTY_NAM ORDER BY fatality_rate DESC LIMIT 20;",
     },
     {
@@ -62,34 +62,48 @@ EXAMPLES = [
         "input": "Could you plot the accidents that involved a fatality.",
         "query": "SELECT LANDED_LAT as latitude, LANDED_LON as longitude FROM accidents WHERE ACC_SVRTY_ LIKE '%FATAL%';",
     },
+    {
+        "input": "Plot the crashes that involved a death during daylight.",
+        "query": "SELECT LANDED_LAT as latitude, LANDED_LON as longitude FROM accidents WHERE LIGHT_COND = 'DAYLIGHT' AND ACC_SVRTY_ = 'FATAL';",
+    },
 ]
 
 
 
 
 # Unless the user specifies a specific number of examples they wish to obtain, always limit your query to at most {top_k} results.
-SYSTEM_PREFIX = """You are an agent designed to interact with a SQL database.
+SYSTEM_PREFIX = """Your name is DataBot. You are an agent designed to interact with a SQL database.
 Given an input question, create a syntactically correct {dialect} query to run, then look at the results of the query and return the answer.
 
 You can order the results by a relevant column to return the most interesting examples in the database.
 Never query for all the columns from a specific table, only ask for the relevant columns given the question.
 You have access to tools for interacting with the database.
 Only use the given tools. Only use the information returned by the tools to construct your final answer.
-You MUST double check your query before executing it. If you get an error while executing a query, rewrite the query and try again.
+You MUST double check your query before executing it. If you get an error while executing a query, review the schema and try again.
 
 DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 
-DO NOT guess or make something up.
+DO NOT hallucinate, guess or make something up. If the questions is related to the database, you must use a query.
 
-If you think a proper noun is mispelled, you must ALWAYS first look up the filter value using the "search_distinct_text" tool! 
+If you think a proper noun is mispelled, you must ALWAYS first look up the filter value using the "search_distinct_text" tool. 
 
-If the question does not seem related to the database, return "I'm not sure." as the answer.
+If the question does not seem related to the database, you may use your knwowledge to chat with the user, and remind them to try and query the database.
 
-If you are asked to map something, return only the latitudes and longitudes in the format '(latitude, longitude), (latitude, longitude), ...'.
+If you are asked to map, plot or show something, return the latitudes and longitudes.
+
+Always use your "query-checker" tool before executing any query.
+
+You have access to the map_tool. If your query outputs coordinates to be mapped, always use the map_tool. 
+Inputs to map tool should be a list of coordinates in the format (latitidue, longitude), (latitidue, longitude)...
+
+If you get an error running a query, use the sql_sb_list_tables tool, then use sql_db_schema tool, and review the schema before rewriting your query.
 
 Here are some examples of user inputs and their corresponding SQL queries:"""
 
 
 # description of our retriever tool
-DESCRIPTION = """Use to look up values to filter on. Input is an approximate spelling of a piece of text, output is \
+DESCRIPTION_RETRIEVER = """Use to look up values to filter on. Input is an approximate spelling of a piece of text, output is \
     valid spelling of text. Use the text most similar to the search.""" # define a description to help llm think
+
+
+DESCRIPTION_CHECKER = """Use this tool before executing an query. Input is a query, and output tells you if query is valid or not. """

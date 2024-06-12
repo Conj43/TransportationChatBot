@@ -34,13 +34,7 @@ def collect_text_column_values(conn):
 
     return text_column_values # returns all distinct text values
 
-# function to display points to a map using streamlit's st.map
-def display_map(coordinates, st):
-    if coordinates: # coordinates should be a list of coordinates
-        df = pd.DataFrame(coordinates, columns=['latitude', 'longitude']) # convert to pandas df
-        st.map(df) # output map using coordinates to plot
-    else: # write that there were no coordinates to display if coordinates is empty
-        st.write("No coordinates to display.")
+
 
 # function to invoke the agent using query and config
 def call_agent(user_query, config, agent):
