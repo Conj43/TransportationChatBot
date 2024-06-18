@@ -6,7 +6,6 @@ import tempfile
 from dotenv import load_dotenv
 import streamlit as st
 
-
 # langchain imports
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.callbacks.streamlit import StreamlitCallbackHandler
@@ -19,14 +18,14 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_core.chat_history import BaseChatMessageHistory
 
-
 # imports from other files
 from utils import call_agent
 from prompts import full_prompt
 from tools import create_map_llm, create_tools
 from ui import display_chat_messages, get_user_query, setup_streamlit_page
 
-
+# import logging
+# logging.getLogger().setLevel(logging.ERROR) # hide warning log
 
 # sets up streamlit page in ui.py
 setup_streamlit_page()
@@ -67,7 +66,7 @@ if uploaded_file is not None:
 if st.session_state.db_path is not None:
     db = SQLDatabase.from_uri(f'sqlite:///{st.session_state.db_path}')
 
-     # method to get session history for current session id in store
+     # method to get chat history for current session id in store
     def get_session_history(session_id: str) -> BaseChatMessageHistory:
         if session_id not in st.session_state.store:
             st.session_state.store[session_id] = ChatMessageHistory()
@@ -83,7 +82,7 @@ if st.session_state.db_path is not None:
             verbose=True,
             agent_type="openai-tools",
             extra_tools=tools,
-            return_intermediate_steps=True,
+            # return_intermediate_steps=True,
             max_iterations=10,
         )
         
@@ -93,12 +92,9 @@ if st.session_state.db_path is not None:
             get_session_history,
             input_messages_key="input",
             history_messages_key="chat_history",
-            verbose=True,
-            return_intermediate_steps=True,
         )
 
-        return agent_with_chat_history # return the runnable agent with history
-
+        return agent_with_chat_history # return the runnable agent with chat history
 
 
     # initialize tools from tools.py function 
@@ -116,28 +112,17 @@ if st.session_state.db_path is not None:
     # gets the users input 
     user_query = get_user_query()
 
-    # if has submitted input
+    # if user has submitted input
     if user_query:
         st.session_state.messages.append({"role": "user", "content": user_query}) # add the input to messages
         st.chat_message("user", avatar="💬").write(user_query)
 
         with st.chat_message("assistant", avatar="🤖"):
-            st_cb = StreamlitCallbackHandler(st.container()) # use built in langchain function to get call backs to display to screen
-            config = {"configurable": {"session_id": "123"}, "callbacks": [st_cb]} # initialize config with session id 123 and st_cb is streamlit callbacks
+            st_cb = StreamlitCallbackHandler(st.container()) # use built in langchain function to get call backs to display to container
+            config = {"configurable": {"session_id": "123"}, "callbacks": [st_cb]} # initialize config with session id and st_cb is streamlit callbacks
             response = call_agent(user_query, config, agent_with_chat_history) # get the response
             response = response['output'] # just keep the output text from the bot
-            st.session_state.messages.append({"role": "assistant", "content": response}) # add it to the end of the messages
+            st.session_state.messages.append({"role": "assistant", "content": response}) # add output to the end of the messages
             st.write(response) # write it to the screen
 
             
-            # print(response)
-            # test = map_llm.invoke(response['output']) # invoke map llm to interpret response
-            # if test.map and test.coordinates is not None: # if test.map is true we are going to use coordinates to map
-            #     print(test.coordinates)
-            #     map = display_map(test.coordinates, st) # uses coordinates to map output
-            #     response = response['output'] # change response to just the output
-            #     st.session_state.messages.append({"role": "assistant", "content": response}) # add the response to end of messages
-            # else: # if we aren't going to map (means there were no coordinates)
-            #     response = response['output'] # just keep the output text from the bot
-            #     st.session_state.messages.append({"role": "assistant", "content": response}) # add it to the end of the messages
-            #     st.write(response) # write it to the screen

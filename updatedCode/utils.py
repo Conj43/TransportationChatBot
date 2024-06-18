@@ -1,6 +1,5 @@
 # main file is main.py
-
-import pandas as pd
+# from langsmith import traceable
 
 # function to get all column names using sql lite connection c
 def get_all_col_names(c):
@@ -37,5 +36,6 @@ def collect_text_column_values(conn):
 
 
 # function to invoke the agent using query and config
+# @traceable
 def call_agent(user_query, config, agent):
     return agent.invoke({'input': user_query}, config=config)
