@@ -48,14 +48,20 @@ if "messages" not in st.session_state:
 if "store" not in st.session_state:
     st.session_state.store = {}
 
-if st.sidebar.button("Clear History"):
-    clear_message_history()
 
 
 
 # get an uploaded .db file
+if st.sidebar.button("Clear History"):
+    clear_message_history()
+st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
+st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
+                    You can map your data by asking DataBot to map accidents or crashes with specific queries. \
+                    You can also visualze your data by asking DataBot to graph specific data for you!")
+st.sidebar.markdown("---")
+st.sidebar.subheader("Database Upload")
+st.sidebar.markdown("Upload a SQLite .db file for analysis.")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
-
 # handle when file is uploaded
 if uploaded_file is not None:
     if uploaded_file.name.endswith('.db'):
@@ -67,6 +73,10 @@ if uploaded_file is not None:
         st.sidebar.success("Database uploaded successfully.") 
     else:
         st.sidebar.error("Error: The uploaded file is not a .db file. Please try a .db file.")
+
+
+
+
 
 # initializes db to your .db file
 if st.session_state.db_path is not None:
