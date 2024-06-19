@@ -133,3 +133,4 @@ webencodings==0.5.1
 xyzservices==2024.6.0
 yarg==0.1.9
 yarl==1.9.4
+streamlit_folium
