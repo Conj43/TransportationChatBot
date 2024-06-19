@@ -17,11 +17,10 @@ def get_user_query():
 
 # function to clear the message history, also clears the chat history for the bot
 def clear_message_history():
-    if "messages" not in st.session_state or st.sidebar.button("Clear message history"):
+    if st.session_state["messages"] is not None:
         st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
-    if st.sidebar.button("Clear message history"):
-        if st.session_state.store is not None:
-            st.session_state.store = {}
+    if st.session_state.store is not None:
+        st.session_state.store = {}
 
 
 # sets up streamlit page with title and header

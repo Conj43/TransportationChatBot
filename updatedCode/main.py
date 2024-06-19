@@ -22,7 +22,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from utils import call_agent
 from prompts import full_prompt
 from tools import create_map_llm, create_tools
-from ui import display_chat_messages, get_user_query, setup_streamlit_page
+from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history
 
 # import logging
 # logging.getLogger().setLevel(logging.ERROR) # hide warning log
@@ -48,6 +48,9 @@ if "messages" not in st.session_state:
 if "store" not in st.session_state:
     st.session_state.store = {}
 
+if st.sidebar.button("Clear History"):
+    clear_message_history()
+
 
 
 # get an uploaded .db file
@@ -55,12 +58,15 @@ uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_u
 
 # handle when file is uploaded
 if uploaded_file is not None:
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-    temp_file.write(uploaded_file.read())
-    temp_file_path = temp_file.name
-    temp_file.close()
-    st.session_state.db_path = temp_file_path
-    st.sidebar.success("Database uploaded successfully.") 
+    if uploaded_file.name.endswith('.db'):
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+        temp_file.write(uploaded_file.read())
+        temp_file_path = temp_file.name
+        temp_file.close()
+        st.session_state.db_path = temp_file_path
+        st.sidebar.success("Database uploaded successfully.") 
+    else:
+        st.sidebar.error("Error: The uploaded file is not a .db file. Please try a .db file.")
 
 # initializes db to your .db file
 if st.session_state.db_path is not None:
