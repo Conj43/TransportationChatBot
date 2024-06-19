@@ -3,7 +3,7 @@
 # imports
 import os
 import tempfile
-# from dotenv import load_dotenv
+from dotenv import load_dotenv
 import streamlit as st
 
 # langchain imports
@@ -31,7 +31,7 @@ from ui import display_chat_messages, get_user_query, setup_streamlit_page, clea
 setup_streamlit_page()
 
 # load env variables
-# load_dotenv()
+load_dotenv()
 
 # define open ai api key
 openai_api_key = os.environ['OPENAI_API_KEY']
