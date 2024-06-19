@@ -2,7 +2,7 @@
 
 # imports
 import sqlite3
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Tuple
 import pandas as pd
 import streamlit as st
 import folium
@@ -110,11 +110,9 @@ def print_output(output):
 
 # defines a class that classifies output from our sql agent as coordinates or not coordinates, we use structured output to easily identify our cases
 class Map(BaseModel):
-    """Take the input coordinates and translate them into a python list. \
-        Format of coordinates will be [(latitude, longitude), (latitude, longitude)...].""" # instructions for llm
+    # """Take the input coordinates and translate it into a list of coordinate pairs in the format: [(21.21323, -83.43232), (43.5435, 54.2344)...] as an example.""" # instructions for llm
     map: bool = Field(description="False if there are no coordinates in the input. True if there are coordinates in the input.") # true if there are coordinates, false if not
-    coordinates: Optional[List] = Field(description="List of coordinates, in the pre-defined format. \
-                                                             If there are no coordinates, coordinates will be None.")
+    coordinates: Optional[List[Tuple]] = Field(description="List of coordinate pairs. If there are no coordinates, coordinates will be None.")
 
 
 # class that allows us to define variables for our graph
