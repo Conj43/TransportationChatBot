@@ -9,6 +9,7 @@ import folium
 from streamlit_folium import folium_static
 
 
+
 # langchain imports
 from langchain_openai import ChatOpenAI
 from langchain_core.pydantic_v1 import BaseModel, Field
@@ -18,28 +19,42 @@ from langchain.agents.agent_toolkits import create_retriever_tool
 from langchain.tools import StructuredTool
 
 # imports from other files
-from utils import collect_text_column_values
-from constants import DESCRIPTION_RETRIEVER
+from utils import collect_text_column_values, get_all_col_names
+from constants import DESCRIPTION_RETRIEVER, DESCRIPTION_COLS
+from calculations import prep_data, calculate_arterial, calculate_freeway
+
+
+
+
 
 
 
 # function to initialize tools the agent will use
 def create_tools(db_path):
     conn = sqlite3.connect(db_path) # use db path parameter to crate connection to the selected database
-    text_values = collect_text_column_values(conn) # run function from utils.py to get all disctinct text values
+    col_names = get_all_col_names(conn)
+    # text_values = collect_text_column_values(conn) # run function from utils.py to get all disctinct text values
     conn.close() # close connection
 
     # initialzie a vector db that will embed all the distict text values
-    vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
+    # vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
+    cols_vector_db = FAISS.from_texts(col_names, OpenAIEmbeddings())
 
     # retriever will be able to retrieve k most similar embeddings and convert to our text values they correspond to
-    retriever = vector_db.as_retriever(search_kwargs={"k": 5})
+    # retriever = vector_db.as_retriever(search_kwargs={"k": 5})
+    cols_retriever = cols_vector_db.as_retriever(search_kwargs={"k":5})
 
     # initilaize retriever tool 
-    retriever_tool = create_retriever_tool(
-        retriever,
-        name="search_distinct_text",
-        description=DESCRIPTION_RETRIEVER,
+    # retriever_tool = create_retriever_tool(
+    #     retriever,
+    #     name="search_distinct_text",
+    #     description=DESCRIPTION_RETRIEVER,
+    # )
+
+    cols_retriever_tool = create_retriever_tool(
+        cols_retriever,
+        name="cols_retriever_tool",
+        description=DESCRIPTION_COLS,
     )
 
     # function to display points to a map using streamlit's st.map
@@ -78,6 +93,7 @@ def create_tools(db_path):
             st.write(f"## {output.plot_title}") # write the title
             st.bar_chart(data=df, x=output.x_axis, y=output.y_axis) # create the chart with corresponding data, x axis and y axis
             st.write(f"### Description") # write the description of the graph
+            # st.write(output.description)
             return "Graph created successfully."
         else:
             st.write("This output does not need to be graphed.")
@@ -93,9 +109,54 @@ def create_tools(db_path):
             graph as well as a short description of the data.",
     )
 
+
+
+
+
+
+
+
+    def execute_sql_query_to_dataframe(query):
+        """
+        Executes an SQL query on the provided SQLite connection and returns the result as a pandas DataFrame.
+        
+        Parameters:
+        - query (str): SQL query to execute.
+        
+        Returns:
+        - pd.DataFrame: Result of the SQL query as a pandas DataFrame.
+        - str: Success message or error message if the query fails.
+        """
+        try:
+            conn = sqlite3.connect(db_path)
+            result_df = pd.read_sql_query(query, conn)
+            prep_data(result_df)
+            
+            conn.close()
+            return "Successful Query", result_df
+        
+        except sqlite3.Error as e:
+            return f"SQL query failed with error: {e} Please rewrite the query and try again using large_query_tool!"
+        except Exception as e:
+            return f"An unexpected error occurred: {e} Please rewrite the query and try again using large_query_tool!"
+
+    large_query_tool = StructuredTool.from_function(
+        func=execute_sql_query_to_dataframe,
+        name="large_query_tool",
+        description="Use this tool when the user's input calls for a large query that returns a lot of data. \
+                The input should be a SQL query. It will run your query and return a pandas DataFrame."
+    )
+
+
+
     # create our list of tools
-    tools = [retriever_tool, map_tool, graph_tool]
+    tools = [map_tool, graph_tool]
+    # tools = [map_tool, graph_tool, large_query_tool]
     # return list of tools that agent can use
+
+   
+
+
     return tools
 
 
@@ -124,7 +185,7 @@ class Graph(BaseModel):
     plot_title: str = Field(description="Title for the graph.")
     x_axis: str = Field(description="Label for the X-axis.")
     y_axis: str = Field(description="Label for the Y-axis.")
-    description: str = Field(description="A long, intuitive description of what the graph is showing.")
+    description: str = Field(description="You are a transportation engineer who is giving a high level, informative description of the data in the graph.")
 
 
 

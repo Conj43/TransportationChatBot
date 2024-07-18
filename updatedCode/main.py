@@ -5,6 +5,8 @@ import os
 import tempfile
 from dotenv import load_dotenv
 import streamlit as st
+from sqlalchemy import create_engine
+from sqlalchemy.engine.url import URL
 
 # langchain imports
 from langchain_community.utilities.sql_database import SQLDatabase
@@ -13,6 +15,7 @@ from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
+from langchain.agents import create_tool_calling_agent
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
@@ -57,7 +60,7 @@ if st.sidebar.button("Clear History"):
 st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
 st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
                     You can map your data by asking DataBot to map accidents or crashes with specific queries. \
-                    You can also visualze your data by asking DataBot to graph specific data for you!")
+                    You can also visualze your data by asking DataBot to graph queried data for you!")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Database Upload")
 st.sidebar.markdown("Upload a SQLite .db file for analysis.")
@@ -80,7 +83,13 @@ if uploaded_file is not None:
 
 # initializes db to your .db file
 if st.session_state.db_path is not None:
-    db = SQLDatabase.from_uri(f'sqlite:///{st.session_state.db_path}')
+    db_url = URL.create( # open db in read only mode
+        drivername="sqlite",
+        database=st.session_state.db_path,
+        query={"mode": "ro"}
+    )
+    engine = create_engine(db_url)
+    db = SQLDatabase(engine)
 
      # method to get chat history for current session id in store
     def get_session_history(session_id: str) -> BaseChatMessageHistory:
