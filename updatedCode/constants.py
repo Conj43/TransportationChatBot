@@ -158,6 +158,7 @@ NOTES:
 - When asked to calculate speed index, generate the query and input it into the speed_index_tool.
 - When asked to calculate time travel index, generate the query and input it into the tti_tool.
 - An increase in speed index means higher congestion. A decrease in speed index means lower congestion.
+- When giving the user numbers, use 5 decimal places.
 
 
 Here are some examples of user inputs and their corresponding SQL queries:"""

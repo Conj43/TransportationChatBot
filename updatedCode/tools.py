@@ -29,7 +29,7 @@ def create_tools(db_path):
     conn = sqlite3.connect(db_path) # use db path parameter to crate connection to the selected database
     col_names = get_all_col_names(conn)
     # text_values = collect_text_column_values(conn) # run function from utils.py to get all disctinct text values
-    conn.close() # close connection
+    # conn.close() # close connection
 
     # initialzie a vector db that will embed all the distict text values
     # vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
@@ -109,20 +109,20 @@ def create_tools(db_path):
     def tti_calculator(query,batch_size=200):
         try:
 
-            conn = sqlite3.connect(db_path)
-            offset = 0
-            dfs = []
-            while True:
-                batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
-                df_batch = pd.read_sql_query(batch_query, conn)
-                if df_batch.empty:
-                    break
-                dfs.append(df_batch)
-                offset += batch_size
-            conn.close()
-
-            result_df = pd.concat(dfs, ignore_index=True)
-            result_df_edit = prep_data(result_df)
+            # conn = sqlite3.connect(db_path)
+            # offset = 0
+            # dfs = []
+            # while True:
+            #     batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
+            #     df_batch = pd.read_sql_query(batch_query, conn)
+            #     if df_batch.empty:
+            #         break
+            #     dfs.append(df_batch)
+            #     offset += batch_size
+            # conn.close()
+            df = pd.read_sql_query(query, conn)
+            # result_df = pd.concat(dfs, ignore_index=True)
+            result_df_edit = prep_data(df)
             total_df = calculate_arterial(result_df_edit)
             aggregated_df = total_df.groupby(['tmc', 'link', 'month']).agg({
                         "TTI_mean": "mean"
@@ -154,20 +154,21 @@ def create_tools(db_path):
     def speed_index_calculator(query,batch_size=200):
         try:
 
-            conn = sqlite3.connect(db_path)
-            offset = 0
-            dfs = []
-            while True:
-                batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
-                df_batch = pd.read_sql_query(batch_query, conn)
-                if df_batch.empty:
-                    break
-                dfs.append(df_batch)
-                offset += batch_size
-            conn.close()
+            # conn = sqlite3.connect(db_path)
+            # offset = 0
+            # dfs = []
+            # while True:
+            #     batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
+            #     df_batch = pd.read_sql_query(batch_query, conn)
+            #     if df_batch.empty:
+            #         break
+            #     dfs.append(df_batch)
+            #     offset += batch_size
+            # conn.close()
 
-            result_df = pd.concat(dfs, ignore_index=True)
-            result_df_edit = prep_data(result_df)
+            # result_df = pd.concat(dfs, ignore_index=True)
+            df = pd.read_sql_query(query, conn)
+            result_df_edit = prep_data(df)
             
             combined_arterials=arterial_spped_index(result_df_edit)
             aggregated_df = combined_arterials.groupby(['tmc', 'link', 'month']).agg({
