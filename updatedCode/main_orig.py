@@ -46,33 +46,33 @@ setup_streamlit_page()
 # # define open ai api key
 # openai_api_key = os.environ['OPENAI_API_KEY']
 
-
-import requests
-import sqlite3
-
-# Initialize session state variables
+# create db path state variable
 if "db_path" not in st.session_state:
     st.session_state.db_path = None
 
+# create messages state variable
 if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
+# create store variable to keep track of history
 if "store" not in st.session_state:
     st.session_state.store = {}
 
-# Sidebar content
+
+
+
+# get an uploaded .db file
 if st.sidebar.button("Clear History"):
     clear_message_history()
 st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
 st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
                     You can map your data by asking DataBot to map accidents or crashes with specific queries. \
-                    You can also visualize your data by asking DataBot to graph queried data for you!")
+                    You can also visualze your data by asking DataBot to graph queried data for you!")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Database Upload")
 st.sidebar.markdown("Upload a SQLite .db file for analysis.")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
-
-# Handle file upload
+# handle when file is uploaded
 if uploaded_file is not None:
     if uploaded_file.name.endswith('.db'):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
@@ -84,61 +84,13 @@ if uploaded_file is not None:
     else:
         st.sidebar.error("Error: The uploaded file is not a .db file. Please try a .db file.")
 
-# Function to fetch data from URL and save as SQLite .db file
-def fetch_data_and_create_db(url, db_file_path):
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        conn = sqlite3.connect(db_file_path)
-        cursor = conn.cursor()
 
-        # Assuming data['active'] is a list of dictionaries
-        if 'active' in data:
-            sample_row = data['active'][0]
-            columns = sample_row.keys()
 
-            # Create table dynamically
-            column_definitions = ', '.join([f"{col} TEXT" for col in columns])
-            create_table_sql = f"CREATE TABLE IF NOT EXISTS traffic_data ({column_definitions})"
-            cursor.execute(create_table_sql)
 
-            # Insert data dynamically
-            for row in data['active']:
-                columns = ', '.join(row.keys())
-                placeholders = ', '.join(['?'] * len(row))
-                sql = f"INSERT INTO traffic_data ({columns}) VALUES ({placeholders})"
-                cursor.execute(sql, list(row.values()))
 
-            conn.commit()
-            conn.close()
-            return db_file_path
-        else:
-            st.sidebar.error("Error: JSON does not contain 'active' key.")
-            return None
-    else:
-        st.sidebar.error(f"Error: Unable to fetch data from URL. Status code: {response.status_code}")
-        return None
-
-# Option to input a URL for data
-st.sidebar.markdown("Or, provide a URL to fetch data:")
-data_url = st.sidebar.text_input("Enter URL")
-
-# Handle URL input
-if st.sidebar.button("Fetch Data"):
-    if data_url:
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
-        temp_file_path = temp_file.name
-        temp_file.close()
-        db_path = fetch_data_and_create_db(data_url, temp_file_path)
-        if db_path:
-            st.session_state.db_path = db_path
-            st.sidebar.success("Data fetched and database created successfully.")
-    else:
-        st.sidebar.error("Error: Please provide a valid URL.")
-
-# Initialize db connection to your .db file
+# initializes db to your .db file
 if st.session_state.db_path is not None:
-    db_url = URL.create( 
+    db_url = URL.create( # open db in read only mode
         drivername="sqlite",
         database=st.session_state.db_path,
         query={"mode": "ro"}
@@ -146,18 +98,17 @@ if st.session_state.db_path is not None:
     engine = create_engine(db_url)
     db = SQLDatabase(engine)
 
-    # Method to get chat history for current session id in store
+     # method to get chat history for current session id in store
     def get_session_history(session_id: str) -> BaseChatMessageHistory:
         if session_id not in st.session_state.store:
             st.session_state.store[session_id] = ChatMessageHistory()
         return st.session_state.store[session_id]
 
 
-
     # method to create sql agent with history 
     def create_sql_agent_with_history(db, tools, full_prompt):
         agent = create_sql_agent( # initilaize sql agent
-            llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+            llm=ChatOpenAI(model="gpt-3.5-turbo", temperature=0),
             db=db,
             prompt=full_prompt,
             verbose=True,

@@ -6,11 +6,7 @@ import itertools
 import pandas as pd
 
 
-
-
-
 def define_MapNo(df_art_si_tmc2):
-    print("in func",df_art_si_tmc2)
     df_art_mapno = df_art_si_tmc2[df_art_si_tmc2['congestion_level'].isin(["Moderate",'Heavy','Severe'])].\
                    sort_values(['peak','tmc','link']).reset_index().drop(columns = {"index"})
 
@@ -140,21 +136,39 @@ def combine_SI_AM_PM(df_art_am, df_art_pm, df_static, road_type):
     return df_art_si_tmc
 
 
+# def prep_data(result_df): #!!!!!
+#     result_df['measurement_tstamp'] = pd.to_datetime(result_df['measurement_tstamp'])
+#     result_df['hour'] = result_df['measurement_tstamp'].dt.hour
+#     result_df['dow'] = result_df['measurement_tstamp'].dt.weekday
+#     result_df['month'] = result_df['measurement_tstamp'].dt.month
+#     result_df = result_df[result_df['hour'].isin([6,7,8,15,16,17])]
+#     result_df.rename(columns={'tmc_code':'tmc'}, inplace=True)
+
+
+#     # result_df = result_df[['tmc', 'road', 'direction', 'county', 'miles', 'road_order', 'f_system']]
+#     result_df.rename(columns={'road_order':'link'}, inplace=True)
+#     result_df['f_system'] = result_df['f_system'].astype(int)
+#     result_df['road_type'] = result_df['f_system'].apply(lambda x: 'freeway' if x in [1,2] else 'arterial')
+
+#     result_df['period']= result_df['hour'].apply(lambda x: 'AM' if x in [6,7,8] else 'PM')
+#     return result_df
+
+
 def prep_data(result_df):
-    result_df['measurement_tstamp'] = pd.to_datetime(result_df['measurement_tstamp'])
-    result_df['hour'] = result_df['measurement_tstamp'].dt.hour
-    result_df['dow'] = result_df['measurement_tstamp'].dt.weekday
-    result_df['month'] = result_df['measurement_tstamp'].dt.month
-    result_df = result_df[result_df['hour'].isin([6,7,8,15,16,17])]
-    result_df.rename(columns={'tmc_code':'tmc'}, inplace=True)
 
+    result_df['hh'] = result_df['hh'].astype(int)
+    result_df['avg_speed'] = result_df['avg_speed'].astype(float)
+    result_df['ffs'] = result_df['ffs'].astype(float)
+    result_df['link'] = result_df['link'].astype(int)
+    result_df['dt'] = pd.to_datetime(result_df['dt'])
+    result_df['month'] = result_df['dt'].dt.month
+    result_df['dow'] = result_df['dt'].dt.weekday
+    result_df['year'] = result_df['dt'].dt.year
+    result_df = result_df[result_df['hh'].isin([6,7,8,15,16,17])]
+    result_df['period']= result_df['hh'].apply(lambda x: 'AM' if x in [6,7,8] else 'PM')
+    result_df['road_type']='arterial'
+    result_df.rename(columns={"hh": "hour", "avg_speed": "speed","ffs": "historical_average_speed" ,"length":"miles"}, inplace= True)
 
-    # result_df = result_df[['tmc', 'road', 'direction', 'county', 'miles', 'road_order', 'f_system']]
-    result_df.rename(columns={'road_order':'link'}, inplace=True)
-    result_df['f_system'] = result_df['f_system'].astype(int)
-    result_df['road_type'] = result_df['f_system'].apply(lambda x: 'freeway' if x in [1,2] else 'arterial')
-
-    result_df['period']= result_df['hour'].apply(lambda x: 'AM' if x in [6,7,8] else 'PM')
     return result_df
 
 
@@ -167,8 +181,8 @@ def calculate_arterial(result_df):
     art_pti_tti = art_map.merge(art_pti_tti, on = ['MapNo','peak'], how = 'left')
     arterials_out_ = art_pti_tti.merge(df_art_out, on = df_art_out.columns.values.tolist(), how = 'right').sort_values(['peak','MapNo']).\
                     reset_index().drop(columns = {"index"})
-    arterials_out_ = arterials_out_.groupby(['tmc', 'peak']).first().reset_index()
-    arterials_out_ = arterials_out_.drop(columns=['measurement_tstamp', 'speed'])
+    # arterials_out_ = arterials_out_.groupby(['tmc', 'peak']).first().reset_index()!!
+    # arterials_out_ = arterials_out_.drop(columns=['measurement_tstamp', 'speed'])!!
     # arterials_out_.to_csv('arterials.csv', index=True)
     return arterials_out_
 
@@ -181,9 +195,15 @@ def calculate_freeway(result_df):
     free_pti_tti = free_map.merge(free_pti_tti, on = ['MapNo','peak'], how = 'left')
     freeways_out_ = free_pti_tti.merge(df_free_out, on = df_free_out.columns.values.tolist(), how = 'right').sort_values(['peak','MapNo']).\
                     reset_index().drop(columns = {"index"})
-    freeways_out_ = freeways_out_.groupby(['tmc', 'peak']).first().reset_index()
-    freeways_out_ = freeways_out_.drop(columns=['measurement_tstamp', 'speed'])
+    # freeways_out_ = freeways_out_.groupby(['tmc', 'peak']).first().reset_index()!!
+    # freeways_out_ = freeways_out_.drop(columns=['measurement_tstamp', 'speed'])!!
     # freeways_out_.to_csv('freeways.csv', index=True)
     return freeways_out_
+
+def arterial_spped_index(result_df_edit):
+        arterials_am = Calculate_Speed_Index(result_df_edit, 'arterial', 'AM')
+        arterials_pm = Calculate_Speed_Index(result_df_edit, 'arterial', 'PM')
+        combined_arterials = combine_SI_AM_PM(arterials_am, arterials_pm, result_df_edit, 'arterial')
+        return combined_arterials
 
 

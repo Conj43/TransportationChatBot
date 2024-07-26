@@ -71,16 +71,24 @@ EXAMPLES = [
         "query": "SELECT AVG(speed) AS average_speed FROM sample WHERE tmc_code IN (SELECT tmc FROM tmc WHERE road = 'HI-99');"
     },
     {
-        "input": "Find the speed index of Highway 99.",
-        "query": "SELECT s.tmc_code AS tmc,s.measurement_tstamp, s.speed, s.historical_average_speed, \
-            t.start_latitude, t.start_longitude, t.end_latitude, t.end_longitude, t.road, t.direction, t.county, t.miles, \
-                 t.road_order, t.f_system FROM sample s JOIN tmc t\
-                  ON s.tmc_code = t.tmc WHERE t.road = 'HI-99' AND s.measurement_tstamp >= 'YYYY-MM-DD 07:00:00'\
-                AND s.measurement_tstamp < 'YYYY-MM-DD 09:00:00';"
-    }
+        "input": "Calculate the speed index of area in 2022",
+        "query": "SELECT * FROM traffic_data WHERE dt LIKE '2022%'"
+    },
+        {
+        "input": "Find the speed index of area in 2023",
+        "query": "SELECT * FROM traffic_data WHERE dt LIKE '2023%'"
+    },
 
 ]
 
+
+    #!!!# {
+    #     "input": "Find the speed index of area",
+    #     "query": "SELECT s.tmc_code AS tmc,s.measurement_tstamp, s.speed, s.historical_average_speed, \
+    #         t.start_latitude, t.start_longitude, t.end_latitude, t.end_longitude, t.road, t.direction, t.county, t.miles, \
+    #              t.road_order, t.f_system FROM sample s JOIN tmc t\
+    #               ON s.tmc_code = t.tmc "
+    # },
 
 
 
@@ -126,13 +134,13 @@ EXAMPLES = [
 
 # Here are some examples of user inputs and their corresponding SQL queries:"""
 
-SYSTEM_PREFIX="""Your name is DataBot. You are an agent designed to interact with a SQL Database.
+SYSTEM_PREFIX="""Your name is TitanBot. You are an agent designed to interact with a SQL Database.
 Here are your steps of action:
 1. Receive an input query from the user
 2. Determine if the user's input is related to the database
 3. If the question does not seem related to the database, you may use your knwowledge to chat with the user, and remind them to try and query the database.
 4. Use the sql_db_schema tool to review the schema of all the tables in the database
-5. After you have used sql_db_schema, create a syntactically correct {dialect} query to run. If the query is likely to return a large amount of data or involves complex joins, filtering, or aggregations, use the large_query_tool to run the query.
+5. After you have used sql_db_schema, create a syntactically correct {dialect} query to run. 
 6. Determine if you need to use one of the tools you have access to
 7. Use any tools you need to
 8. Return your answer to the user
@@ -140,17 +148,16 @@ Here are your steps of action:
 NOTES:
 - DO NOT make any DML statements (INSERT, UPDATE, DELETE, DROP etc.) to the database.
 - ALWAYS perform your steps of action in order.
-- NEVER use large_query_tool until you have used sql_db_schema.
-- Use large_query_tool when: 
-    - The query is expected to process or return a significant amount of data.
-	- The query involves complex calculations, multiple joins, or extensive filtering.
 - DO NOT assume example queries will have the same column names as the database you are interacting with
 - DO NOT hallucinate, guess or make something up. If the questions is related to the database, you must use a query.
-- You have access to these tools: [large_query_tool, sql_db_query, sql_db_schema, sql_db_list_tables, sql_db_query_checker, map_tool, graph_tool].
+- You have access to these tools: [tti_tool, speed_index_tool, sql_db_query, sql_db_schema, sql_db_list_tables, sql_db_query_checker, map_tool, graph_tool].
 - If you are asked to map something query for the latitudes and longitudes, then use the map tool.
 - If you are asked to graph something, use the query results to input information into the graph tool.
 - When you graph data, give a high level interpretation of the graph, as if you were a transportation engineer. Use your knowledge to explain why different trends occur.
 - NEVER use the map tool and graph tool at the same time. Only use what is asked of you.
+- When asked to calculate speed index, generate the query and input it into the speed_index_tool.
+- When asked to calculate time travel index, generate the query and input it into the tti_tool.
+- An increase in speed index means higher congestion. A decrease in speed index means lower congestion.
 
 
 Here are some examples of user inputs and their corresponding SQL queries:"""

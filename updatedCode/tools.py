@@ -21,12 +21,7 @@ from langchain.tools import StructuredTool
 # imports from other files
 from utils import collect_text_column_values, get_all_col_names
 from constants import DESCRIPTION_RETRIEVER, DESCRIPTION_COLS
-from calculations import prep_data, calculate_arterial, calculate_freeway
-
-
-
-
-
+from calculations import prep_data, Calculate_Speed_Index, calculate_freeway, combine_SI_AM_PM, arterial_spped_index, calculate_arterial
 
 
 # function to initialize tools the agent will use
@@ -106,52 +101,105 @@ def create_tools(db_path):
         name="graph_tool",
         description="Use this tool when the user asks you to graph something. \
             Inputs to graph tool should be string from agent, including data about \
-            graph as well as a short description of the data.",
+            graph as well as a short description of the data. Make sure you create the graph\
+                  at a zoom fator to where the user can see the differences in values",
     )
 
 
-
-
-
-
-
-
-    def execute_sql_query_to_dataframe(query):
-        """
-        Executes an SQL query on the provided SQLite connection and returns the result as a pandas DataFrame.
-        
-        Parameters:
-        - query (str): SQL query to execute.
-        
-        Returns:
-        - pd.DataFrame: Result of the SQL query as a pandas DataFrame.
-        - str: Success message or error message if the query fails.
-        """
+    def tti_calculator(query,batch_size=200):
         try:
+
             conn = sqlite3.connect(db_path)
-            result_df = pd.read_sql_query(query, conn)
-            prep_data(result_df)
-            
+            offset = 0
+            dfs = []
+            while True:
+                batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
+                df_batch = pd.read_sql_query(batch_query, conn)
+                if df_batch.empty:
+                    break
+                dfs.append(df_batch)
+                offset += batch_size
             conn.close()
-            return "Successful Query", result_df
+
+            result_df = pd.concat(dfs, ignore_index=True)
+            result_df_edit = prep_data(result_df)
+            total_df = calculate_arterial(result_df_edit)
+            aggregated_df = total_df.groupby(['tmc', 'link', 'month']).agg({
+                        "TTI_mean": "mean"
+                    }).reset_index()
+            yearly_averages = aggregated_df[['TTI_mean']].mean(skipna=True)
+
+            return "Successful Query", yearly_averages
         
         except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please rewrite the query and try again using large_query_tool!"
+            return f"SQL query failed with error: {e} Please rewrite the query and try again using tti_calculator!"
         except Exception as e:
-            return f"An unexpected error occurred: {e} Please rewrite the query and try again using large_query_tool!"
+            return f"An unexpected error occurred: {e} Please rewrite the query and try again using tti_calculator!"
 
-    large_query_tool = StructuredTool.from_function(
-        func=execute_sql_query_to_dataframe,
-        name="large_query_tool",
-        description="Use this tool when the user's input calls for a large query that returns a lot of data. \
-                The input should be a SQL query. It will run your query and return a pandas DataFrame."
+    tti_tool = StructuredTool.from_function(
+        func=tti_calculator,
+        name="tti_tool",
+        description="Use this tool to calculate the Time Travel Index or TTI. The user will ask you to calculate TTI, \
+            so you will generate the correct query and input it into this tool."
     )
 
+
+
+
+
+
+
+
+
+    def speed_index_calculator(query,batch_size=200):
+        try:
+
+            conn = sqlite3.connect(db_path)
+            offset = 0
+            dfs = []
+            while True:
+                batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
+                df_batch = pd.read_sql_query(batch_query, conn)
+                if df_batch.empty:
+                    break
+                dfs.append(df_batch)
+                offset += batch_size
+            conn.close()
+
+            result_df = pd.concat(dfs, ignore_index=True)
+            result_df_edit = prep_data(result_df)
+            
+            combined_arterials=arterial_spped_index(result_df_edit)
+            aggregated_df = combined_arterials.groupby(['tmc', 'link', 'month']).agg({
+                        "SI": "mean",
+                        "congestion_level": "first"
+                    }).reset_index()
+            yearly_averages = aggregated_df[['SI']].mean(skipna=True)
+            congestion_level = aggregated_df['congestion_level'].iloc[0]
+                
+                # Create a DataFrame for the output
+            output_df = pd.DataFrame({
+                'yearly_averages_SI': [yearly_averages['SI']],
+                'congestion_level': [congestion_level]
+            })
+            return "Successful Query. Here is the SI and congestion level", output_df
+        
+        except sqlite3.Error as e:
+            return f"SQL query failed with error: {e} Please rewrite the query and try again using speed_index_tool!"
+        except Exception as e:
+            return f"An unexpected error occurred: {e} Please rewrite the query and try again using speed_index_tool!"
+
+    speed_index_tool = StructuredTool.from_function(
+        func=speed_index_calculator,
+        name="speed_index_tool",
+        description="Use this tool to calculate the speed index. The user will ask you to calculate speed index, \
+            so you will generate the correct query and input it into this tool."
+    )
 
 
     # create our list of tools
-    tools = [map_tool, graph_tool]
-    # tools = [map_tool, graph_tool, large_query_tool]
+    # tools = [map_tool, graph_tool]!!!
+    tools = [map_tool, graph_tool, speed_index_tool, tti_tool]
     # return list of tools that agent can use
 
    
