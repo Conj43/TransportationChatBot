@@ -7,6 +7,12 @@ import pandas as pd
 import streamlit as st
 import folium
 from streamlit_folium import folium_static
+import osmnx as ox
+import geopandas as gpd
+from shapely.geometry import LineString
+import sklearn
+
+
 
 
 
@@ -27,30 +33,7 @@ from calculations import prep_data, Calculate_Speed_Index, calculate_freeway, co
 # function to initialize tools the agent will use
 def create_tools(db_path):
     conn = sqlite3.connect(db_path) # use db path parameter to crate connection to the selected database
-    col_names = get_all_col_names(conn)
-    # text_values = collect_text_column_values(conn) # run function from utils.py to get all disctinct text values
-    # conn.close() # close connection
-
-    # initialzie a vector db that will embed all the distict text values
-    # vector_db = FAISS.from_texts(text_values, OpenAIEmbeddings())
-    cols_vector_db = FAISS.from_texts(col_names, OpenAIEmbeddings())
-
-    # retriever will be able to retrieve k most similar embeddings and convert to our text values they correspond to
-    # retriever = vector_db.as_retriever(search_kwargs={"k": 5})
-    cols_retriever = cols_vector_db.as_retriever(search_kwargs={"k":5})
-
-    # initilaize retriever tool 
-    # retriever_tool = create_retriever_tool(
-    #     retriever,
-    #     name="search_distinct_text",
-    #     description=DESCRIPTION_RETRIEVER,
-    # )
-
-    cols_retriever_tool = create_retriever_tool(
-        cols_retriever,
-        name="cols_retriever_tool",
-        description=DESCRIPTION_COLS,
-    )
+    
 
     # function to display points to a map using streamlit's st.map
     def display_map(input):
@@ -132,9 +115,9 @@ def create_tools(db_path):
             return "Successful Query", yearly_averages
         
         except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please rewrite the query and try again using tti_calculator!"
+            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using tti_calculator!"
         except Exception as e:
-            return f"An unexpected error occurred: {e} Please rewrite the query and try again using tti_calculator!"
+            return f"An unexpected error occurred: {e} Please rewrite sql_db_schema and then the query and try again using tti_calculator!"
 
     tti_tool = StructuredTool.from_function(
         func=tti_calculator,
@@ -186,9 +169,9 @@ def create_tools(db_path):
             return "Successful Query. Here is the SI and congestion level", output_df
         
         except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please rewrite the query and try again using speed_index_tool!"
+            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using speed_index_tool!"
         except Exception as e:
-            return f"An unexpected error occurred: {e} Please rewrite the query and try again using speed_index_tool!"
+            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using speed_index_tool!"
 
     speed_index_tool = StructuredTool.from_function(
         func=speed_index_calculator,
@@ -198,13 +181,100 @@ def create_tools(db_path):
     )
 
 
+    def congestion_map(query, batch_size=200):
+        try:
+            # Execute the query and process the data
+            df = pd.read_sql_query(query, conn)
+            result_df_edit = prep_data(df)
+            total_df = calculate_arterial(result_df_edit)
+            
+            # Calculate congestion level for each segment
+            congestion_df = total_df.groupby(['tmc', 'link', 'start_lat', 'end_lat', 'start_long', 'end_long']).agg({
+                "SI": "mean",
+                "congestion_level": "first"
+            }).reset_index()
+
+            # Ensure latitude and longitude are numeric
+            congestion_df[['start_lat', 'end_lat', 'start_long', 'end_long']] = congestion_df[['start_lat', 'end_lat', 'start_long', 'end_long']].apply(pd.to_numeric)
+
+            # Define the area of interest
+            place_name = "St. Louis, Missouri, USA"  # Change as needed
+
+            # Download road network data for the area
+            graph = ox.graph_from_place(place_name, network_type='drive')
+            edges = ox.graph_to_gdfs(graph, nodes=False)
+            nodes = ox.graph_to_gdfs(graph, edges=False)
+
+            # Convert points to GeoDataFrame
+            gdf = gpd.GeoDataFrame(
+                congestion_df,
+                geometry=gpd.points_from_xy(congestion_df.start_long, congestion_df.start_lat),
+                crs='EPSG:4326'
+            )
+
+            # Function to get the nearest node in the road network
+            def get_nearest_node(lat, long):
+                return ox.distance.nearest_nodes(graph, long, lat)
+
+            # Find nearest nodes for start and end points
+            congestion_df['start_node'] = congestion_df.apply(lambda row: get_nearest_node(row.start_lat, row.start_long), axis=1)
+            congestion_df['end_node'] = congestion_df.apply(lambda row: get_nearest_node(row.end_lat, row.end_long), axis=1)
+
+            # Calculate shortest paths between nodes
+            congestion_df['route'] = congestion_df.apply(lambda row: ox.shortest_path(graph, row.start_node, row.end_node, weight='length'), axis=1)
+            congestion_df.dropna(subset=['route'], inplace=True)
+
+            # Define color mapping for congestion levels
+            color_mapping = {
+                "Light": "#83cb22",    # Dark Green
+                "Moderate": "#fcff30", # Dark Yellow
+                "Heavy": "#f9502b",    # Dark Orange
+                "Severe": "#b62000"    # Dark Red
+            }
+
+            # Create a Folium map
+            m = folium.Map(location=[38.77468, -90.41166], zoom_start=10)
+
+            # Add road segments to the map
+            for _, row in congestion_df.iterrows():
+                route_nodes = row['route']
+                route_coords = [(nodes.loc[node].y, nodes.loc[node].x) for node in route_nodes]
+                
+                # Create a tooltip with segment and link numbers, and congestion level
+                tooltip_text = f"Segment Number: {row['tmc']}<br>Link Number: {row['link']}<br>Congestion Level: {row['congestion_level']}"
+                
+                folium.PolyLine(
+                    locations=route_coords,
+                    color=color_mapping[row.congestion_level],
+                    weight=5,
+                    opacity=0.7,
+                    tooltip=folium.Tooltip(tooltip_text, sticky=True)
+                ).add_to(m)
+
+            # Display map to the screen
+            folium_static(m)
+
+            return "Congestion Map displayed successfully"
+        
+        except sqlite3.Error as e:
+            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_map_tool!"
+        except Exception as e:
+            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_map_tool!"
+
+    congestion_map_tool = StructuredTool.from_function(
+        func=congestion_map,
+        name="congestion_map_tool",
+        description="Use this tool to draw the congestion map. The user will ask you for a congestion map, \
+            so you will generate the correct query and input it into this tool."
+    )
+
+
+
     # create our list of tools
-    # tools = [map_tool, graph_tool]!!!
-    tools = [map_tool, graph_tool, speed_index_tool, tti_tool]
+    tools = [map_tool, graph_tool, speed_index_tool, tti_tool, congestion_map_tool]
     # return list of tools that agent can use
 
    
-
 
     return tools
 

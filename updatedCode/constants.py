@@ -74,21 +74,25 @@ EXAMPLES = [
         "input": "Calculate the speed index of area in 2022",
         "query": "SELECT * FROM traffic_data WHERE dt LIKE '2022%'"
     },
-        {
+    {
         "input": "Find the speed index of area in 2023",
         "query": "SELECT * FROM traffic_data WHERE dt LIKE '2023%'"
     },
+    {
+        "input": "Make a congestion map of all roads in 2022",
+        "query": "SELECT * FROM traffic_data WHERE dt LIKE '2022%'"
+    },
+
 
 ]
 
-
-    #!!!# {
-    #     "input": "Find the speed index of area",
-    #     "query": "SELECT s.tmc_code AS tmc,s.measurement_tstamp, s.speed, s.historical_average_speed, \
-    #         t.start_latitude, t.start_longitude, t.end_latitude, t.end_longitude, t.road, t.direction, t.county, t.miles, \
-    #              t.road_order, t.f_system FROM sample s JOIN tmc t\
-    #               ON s.tmc_code = t.tmc "
-    # },
+# {
+#         "input": "Find the speed index of area",
+#         "query": "SELECT s.tmc_code AS tmc,s.measurement_tstamp, s.speed, s.historical_average_speed, \
+#             t.start_latitude, t.start_longitude, t.end_latitude, t.end_longitude, t.road, t.direction, t.county, t.miles, \
+#                  t.road_order, t.f_system FROM sample s JOIN tmc t\
+#                   ON s.tmc_code = t.tmc "
+#     },
 
 
 
@@ -150,7 +154,7 @@ NOTES:
 - ALWAYS perform your steps of action in order.
 - DO NOT assume example queries will have the same column names as the database you are interacting with
 - DO NOT hallucinate, guess or make something up. If the questions is related to the database, you must use a query.
-- You have access to these tools: [tti_tool, speed_index_tool, sql_db_query, sql_db_schema, sql_db_list_tables, sql_db_query_checker, map_tool, graph_tool].
+- You have access to these tools: [tti_tool, speed_index_tool, sql_db_query, sql_db_schema, sql_db_list_tables, sql_db_query_checker, map_tool, graph_tool, congestion_map_tool].
 - If you are asked to map something query for the latitudes and longitudes, then use the map tool.
 - If you are asked to graph something, use the query results to input information into the graph tool.
 - When you graph data, give a high level interpretation of the graph, as if you were a transportation engineer. Use your knowledge to explain why different trends occur.
@@ -159,6 +163,8 @@ NOTES:
 - When asked to calculate time travel index, generate the query and input it into the tti_tool.
 - An increase in speed index means higher congestion. A decrease in speed index means lower congestion.
 - When giving the user numbers, use 5 decimal places.
+- Always check the chat history before querying to make sure you don't already have the information the user desires.
+- When the user asks to generate a congestion map, input the query into the congestion_map_tool.
 
 
 Here are some examples of user inputs and their corresponding SQL queries:"""

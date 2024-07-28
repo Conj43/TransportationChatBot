@@ -41,3 +41,4 @@ def collect_text_column_values(conn):
 # @traceable
 def call_agent(user_query, config, agent):
     return agent.invoke({'input': user_query}, config=config)
+
