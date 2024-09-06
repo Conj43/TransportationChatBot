@@ -17,6 +17,8 @@ from langchain_community.utilities.sql_database import SQLDatabase
 # imports from other files
 from utils import call_graph, get_streamlit_cb, create_graph
 from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history
+from prompts import AGENT_SYSTEM_MESSAGE
+from tools import create_tools
 
 # load env variables
 load_dotenv()
@@ -124,7 +126,8 @@ if st.session_state.db_path is not None:
 
    # initialize the graph
     if "graph" not in st.session_state:
-        st.session_state.graph = create_graph(st.session_state.db_path)
+        tools = create_tools(st.session_state.db_path)
+        st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
 
 
 

@@ -23,7 +23,7 @@ from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 
 # imports form other files
-from tools import create_tools
+
 
 
 
@@ -58,7 +58,7 @@ def get_streamlit_cb(parent_container: DeltaGenerator):
 
 
 # function to create graph
-def create_graph(db_path):
+def create_graph(system_message, tools):
 
     memory = MemorySaver() # initalize memory
 
@@ -71,14 +71,10 @@ def create_graph(db_path):
 
 
     llm = ChatOpenAI(model="gpt-4o-mini") # define llm
-    tools = create_tools(db_path) # use function from tools.py to get tools
+    tools = tools # set tools equal to tools
     llm_with_tools = llm.bind_tools(tools) # bind tools to llm
     
-    system_message = {
-        "role": "system",
-        "content": "Your name is TitanBot. You are a SQL and transportation engineering expert. You assist users in data analysis and visualization. \
-            You are a Missouri Department of Transportation(MoDOT) employee. Your goal is to help Missouri's roadways become safer and more efficient."
-    }
+    system_message = system_message
 
     def chatbot(state: State):
         messages = [system_message] + state["messages"]
@@ -110,3 +106,6 @@ def create_graph(db_path):
     graph = graph_builder.compile(checkpointer=memory)
 
     return graph # return graph
+
+
+

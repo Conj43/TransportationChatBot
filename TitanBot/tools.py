@@ -25,6 +25,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # imports from other files
 from calculations import prep_data, arterial_speed_index, calculate_arterial
 from sandbox import AICodeSandbox
+from utils import create_graph, call_graph
+from prompts import SI_CODE_SYSTEM_MESSAGE
 
 
 tavily_api_key = os.getenv('TAVILY_API_KEY')
@@ -129,40 +131,27 @@ def create_tools(db_path):
 
 
 
-    def speed_index_calculator(query):
+    def speed_index_calculator(input):
         try:
-            
-            conn = sqlite3.connect(db_path)
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            result_df_edit = prep_data(df)
-            
-            combined_arterials=arterial_speed_index(result_df_edit)
-            aggregated_df = combined_arterials.groupby(['tmc', 'link', 'month']).agg({
-                        "SI": "mean",
-                        "congestion_level": "first"
-                    }).reset_index()
-            yearly_averages = aggregated_df[['SI']].mean(skipna=True)
-            congestion_level = aggregated_df['congestion_level'].iloc[0]
-                
-                # Create a DataFrame for the output
-            output_df = pd.DataFrame({
-                'yearly_averages_SI': [yearly_averages['SI']],
-                'congestion_level': [congestion_level]
-            })
-            return "Successful Query. Here is the SI and congestion level", output_df
-        
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using speed_index_tool!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using speed_index_tool!"
+            tools = create_code_tools(db_path)
+            code_graph = create_graph(SI_CODE_SYSTEM_MESSAGE, tools)
+            config = {"configurable": {"thread_id": "2"}}
+            response = call_graph(input, config, code_graph)
+            print("CodeCC: ",response)
+            code, result = code_exec(response)
+            return code, result
+        except:
+            print('error')
+
+        return "Error"
 
     speed_index_tool = StructuredTool.from_function(
         func=speed_index_calculator,
         name="speed_index_tool",
-        description="Use this tool to calculate the speed index. The user will ask you to calculate speed index, \
-            so you will generate the correct query and input it into this tool. The query you create should query \
-                for all data in the correct table. Make sure your calculations are rounded to 5 decimal places."
+        description="Use this tool to calculate the speed index. If the user asks you to calculate speed index, directly input thier question into this tool. \
+              You may add extra history that is relevant if needed. \
+                You will get the code and the result of executing the code. Show the user the code and provide them with the results. \
+                Tell them to look over the code and ask if they'd like you to make any changes."
     )
 
 
@@ -463,25 +452,26 @@ def create_tools(db_path):
     
     def code_exec(input):
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        map_llm = llm.with_structured_output(Code)
-        response=map_llm.invoke(input)
+        code_llm = llm.with_structured_output(Code)
+        response=code_llm.invoke(input)
         print("Input: ",input)
+        
+        container_file_path = '/test.db'
         print("dbpath: ",db_path)
-        container_file_path = f'/{db_path}'
         db_content = get_database_content(db_path)
-
+        print("container file path: ",container_file_path)
         print("Dependencies: ", response.dependencies)
         sandbox = AICodeSandbox(packages=response.dependencies)
-        print("Code: ", input)
+        print("Code: ", response.code)
         
         try:
             sandbox.write_file(container_file_path, db_content)
-            result = sandbox.run_code(input)
+            result = sandbox.run_code(response.code)
             print(result)
         finally:
             sandbox.close()
 
-        return "Success!", result
+        return response.code, result
 
 
     code_executor = StructuredTool.from_function(
@@ -513,6 +503,19 @@ def create_tools(db_path):
     return tools
 
 
+def create_code_tools(db_path):
+    db = SQLDatabase.from_uri(f'sqlite:///{db_path}')
+    toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(model="gpt-4o-mini"))
+    tools = toolkit.get_tools()
+
+    list_tables_tool = next(tool for tool in tools if tool.name == "sql_db_list_tables")
+    get_schema_tool = next(tool for tool in tools if tool.name == "sql_db_schema")
+
+    tools = [list_tables_tool, get_schema_tool]
+    return tools
+
+
+
 def print_output(output):
     print(f"Title: {output.plot_title}")
     print(f"X Values: {output.x_values}")
@@ -531,9 +534,9 @@ class Map(BaseModel):
 
 # class that allows us to define variables for our code execution
 class Code(BaseModel):
-    """Correctly map dependencies and code."""
-    dependencies: Optional[List[str]] = Field(description="List of dependencies to be installed, if there are any. NEVER include sqlite or sqlite3 in this list.")
-
+    """Correctly map dependencies that need to be installed."""
+    dependencies: Optional[List[str]] = Field(description="List of dependencies to be installed. sqlite and sqlite3 are already installed, DO NOT include in this list.")
+    code: str = Field(description="Put the python code into this field.")
 
 
 # class that allows us to define variables for our graph
