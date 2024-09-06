@@ -5,6 +5,8 @@ import streamlit as st
 
 # imports from other files
 from utils import create_graph
+from tools import create_tools
+from prompts import AGENT_SYSTEM_MESSAGE
 
 # function to display all messages
 def display_chat_messages(messages):
@@ -24,7 +26,8 @@ def clear_message_history():
     if st.session_state["messages"] is not None:
         st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
     if "graph" != None:
-        st.session_state.graph = create_graph(st.session_state.db_path)
+        tools = create_tools(st.session_state.db_path)
+        st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
 
 
 # sets up streamlit page with title and header
