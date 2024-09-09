@@ -149,10 +149,9 @@ def create_tools(db_path):
     speed_index_tool = StructuredTool.from_function(
         func=speed_index_calculator,
         name="speed_index_tool",
-        description="Use this tool to calculate the speed index. If the user asks you to calculate speed index, directly input thier question into this tool. \
-              You may add extra history that is relevant if needed. \
-                You will get the code and the result of executing the code. Show the user the code and provide them with the results. \
-                Tell them to look over the code and ask if they'd like you to make any changes."
+        description="Use this tool to calculate speed index. Input is a string explaning the user's request.  \
+                You will get the code and the result of executing the code.  \
+                Display the code to the user to show them how you got your results, then show them your results."
     )
 
 
@@ -462,7 +461,7 @@ def create_tools(db_path):
         db_content = get_database_content(db_path)
         print("container file path: ",container_file_path)
         print("Dependencies: ", response.dependencies)
-        sandbox = AICodeSandbox(packages=response.dependencies)
+        sandbox = AICodeSandbox(packages=['pandas', 'numpy'])
         print("Code: ", response.code)
         
         try:
