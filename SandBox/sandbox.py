@@ -66,11 +66,15 @@ class AICodeSandbox:
 
         Args:
             filename (str): Name of the file to create or overwrite.
-            content (str): Content to write to the file.
+            content (bytes): Content to write to the file in binary format.
 
         Raises:
             Exception: If writing to the file fails.
         """
+        
+        if isinstance(content, str): # if input is string, convert to bytes
+            content = content.encode('utf-8')
+
         directory = os.path.dirname(filename)
         if directory:
             mkdir_command = f'mkdir -p {shlex.quote(directory)}'
@@ -78,20 +82,22 @@ class AICodeSandbox:
             if mkdir_result.exit_code != 0:
                 raise Exception(f"Failed to create directory: {mkdir_result.output.decode('utf-8')}")
 
+        # Create a tar archive containing the file
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode='w') as tar:
-            file_data = content.encode('utf-8')
             tarinfo = tarfile.TarInfo(name=filename)
-            tarinfo.size = len(file_data)
-            tar.addfile(tarinfo, io.BytesIO(file_data))
+            tarinfo.size = len(content)
+            tar.addfile(tarinfo, io.BytesIO(content))
 
         tar_stream.seek(0)
 
         try:
+            # Upload the tar archive to the container
             self.container.put_archive('/', tar_stream)
         except Exception as e:
             raise Exception(f"Failed to write file: {str(e)}")
 
+        # Verify that the file was created
         check_command = f'test -f {shlex.quote(filename)}'
         check_result = self.container.exec_run(["sh", "-c", check_command])
         if check_result.exit_code != 0:
@@ -105,15 +111,35 @@ class AICodeSandbox:
             filename (str): Name of the file to read.
 
         Returns:
-            str: Content of the file.
+            str or bytes: Content of the file. Decodes to str if text, otherwise returns bytes.
 
         Raises:
-            Exception: If reading the file fails.
+            Exception: If reading the file fails or file does not exist.
         """
-        result = self.container.exec_run(["cat", filename])
-        if result.exit_code != 0:
-            raise Exception(f"Failed to read file: {result.output.decode('utf-8')}")
-        return result.output.decode('utf-8')
+        try:
+            # Retrieve the file as a tar archive stream
+            bits, stat = self.container.get_archive(filename)
+            
+            # Concatenate all parts of the file into a single byte stream
+            file_content = b"".join(bits)
+
+            # Attempt to decode the file content as UTF-8 text
+            try:
+                return file_content.decode('utf-8')
+            except UnicodeDecodeError:
+                # Print the first few bytes of the file to help diagnose the issue
+                # print(f"UnicodeDecodeError: The file '{filename}' is not valid UTF-8 text.")
+                # print(f"First 100 bytes of the file content: {file_content[:100]}")
+                # Return as binary data
+                return file_content
+
+        except docker.errors.NotFound:
+            raise Exception(f"File not found: {filename}")
+        except docker.errors.APIError as e:
+            raise Exception(f"Docker API error occurred: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Failed to read file: {str(e)}")
+
 
     def run_code(self, code, env_vars=None):
         """
@@ -169,14 +195,15 @@ class AICodeSandbox:
             finally:
                 self.container = None
 
-        # Optional: Wait for a short period to ensure container is fully removed.
-        time.sleep(1)  # Reduced sleep time for better responsiveness
+        time.sleep(1)  # make sure container has time to be removed
 
         if self.temp_image:
             try:
                 for _ in range(3):
                     try:
+                        print(f"Removing image {self.temp_image.id}...")
                         self.client.images.remove(self.temp_image.id, force=True)
+                        print("Image removed successfully.")
                         break
                     except docker.errors.APIError as e:
                         print(f"Attempt to remove image failed: {str(e)}")
@@ -196,22 +223,6 @@ class AICodeSandbox:
         """Context manager exit point."""
         self.close()
 
-    def list_files(directory):
-        """List files and directories in the given directory with detailed information."""
-        try:
-            for entry in os.scandir(directory):
-                info = entry.stat()
-                file_type = 'Unknown'
-                if entry.is_dir():
-                    file_type = 'Directory'
-                elif entry.is_file():
-                    file_type = 'File'
-                elif entry.is_symlink():
-                    file_type = 'Symlink'
-                
-                # Print file type and other details
-                print(f"{entry.name:30} {file_type:10} {info.st_size} bytes")
-        except Exception as e:
-            print(f"Error listing files: {e}")
+
 
 
