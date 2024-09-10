@@ -38,31 +38,14 @@ if "messages" not in st.session_state:
     st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
 
 
+
+
 # Sidebar content
 if st.sidebar.button("Clear History"):
     clear_message_history()
 
-st.sidebar.markdown("---")
 
 
-if st.sidebar.button('Code Gen'):
-    st.sidebar.write('Code Gen Mode Activated!')
-    st.session_state["selected_action"] = "Code Gen"
-
-if st.sidebar.button('SQL Query'):
-    st.sidebar.write('SQL Query Mode Activated!')
-    st.session_state["selected_action"] = "SQL Query"
-
-if st.sidebar.button('Plot Gen'):
-    st.sidebar.write('Plot Gen Mode Activated!')
-    st.session_state["selected_action"] = "Plot Gen"
-
-if st.sidebar.button('Simple Chat'):
-    st.sidebar.write('Simple Chat Mode Activated!')
-    st.session_state["selected_action"] = "Simple Chat"
-
-
-st.sidebar.markdown("---")
 st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
 st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
                     You can map your data by asking TitanBot to map accidents or crashes with specific queries. \
@@ -179,7 +162,28 @@ if st.session_state.db_path is not None:
             st.write(response)
 
         st.session_state["selected_action"] = None
+col1, col2, col3, col4 = st.columns(4)
 
+placeholder = st.empty()
+with placeholder.container():
+    with col1:
+        if st.button('Code Gen'):
+            st.write('Activated!')
+            st.session_state["selected_action"] = "Code Gen"
+
+    with col2:
+        if st.button('SQL Query'):
+            st.write('Activated!')
+            st.session_state["selected_action"] = "SQL Query"
+
+    with col3:
+        if st.button('Plot Gen'):
+            st.write('Activated!')
+            st.session_state["selected_action"] = "Plot Gen"
+    with col4:
+        if st.button('Simple Chat'):
+            st.write(' Activated!')
+            st.session_state["selected_action"] = "Simple Chat"
 
     
     

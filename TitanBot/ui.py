@@ -19,7 +19,7 @@ def display_chat_messages(messages):
 
 # function to return the user input
 def get_user_query():
-    return st.chat_input(placeholder="Ask me anything!")
+    return st.chat_input(placeholder="Ask me anything! Simple Chat is activated by default!")
 
 # function to clear the message history, also clears the chat history for the bot
 def clear_message_history():
@@ -42,7 +42,7 @@ def get_selected_action(user_query, selected_action):
     elif selected_action == "SQL Query":
         return "First look at the schema for all tables in this database. Then write a sql query to answer this query: " + user_query  + " Then run this query and tell me the results."
     elif selected_action == "Plot Gen":
-        return "Use the most recent code and input it into new_graph_tool. Here is the user's query: " + user_query + " If their query does not relate, or the code is not meant to be graphed, ask them for clarification."
+        return "Use the most recent code and input it into graph_tool. Here is the user's query: " + user_query + " If their query does not relate, or the code is not meant to be graphed, ask them for clarification. You may generate some code if there has been no code generated in your conversation yet."
     elif selected_action == "Simple Chat":
         return user_query
     else:

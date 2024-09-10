@@ -70,7 +70,7 @@ def create_graph(system_message, tools):
     graph_builder = StateGraph(State)
 
 
-    llm = ChatOpenAI(model="gpt-4o-mini") # define llm
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # define llm
     tools = tools # set tools equal to tools
     llm_with_tools = llm.bind_tools(tools) # bind tools to llm
     
