@@ -34,3 +34,16 @@ def clear_message_history():
 def setup_streamlit_page():
     st.set_page_config(page_title="TitanBot", page_icon="📊")
     st.header('📊 Welcome to TitanBot')
+
+
+def get_selected_action(user_query, selected_action):
+    if selected_action == "Code Gen":
+        return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate."
+    elif selected_action == "SQL Query":
+        return "First look at the schema for all tables in this database. Then write a sql query to answer this query: " + user_query  + " Then run this query and tell me the results."
+    elif selected_action == "Plot Gen":
+        return "Use the most recent code and input it into new_graph_tool. Here is the user's query: " + user_query + " If their query does not relate, or the code is not meant to be graphed, ask them for clarification."
+    elif selected_action == "Simple Chat":
+        return user_query
+    else:
+        return user_query

@@ -13,6 +13,8 @@ from geopy.distance import geodesic
 import matplotlib as plt
 from tavily import TavilyClient
 import os
+from PIL import Image
+
 
 # langchain imports
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
@@ -26,7 +28,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from calculations import prep_data, arterial_speed_index, calculate_arterial
 from sandbox import AICodeSandbox
 from utils import create_graph, call_graph
-from prompts import SI_CODE_SYSTEM_MESSAGE
+
 
 
 tavily_api_key = os.getenv('TAVILY_API_KEY')
@@ -132,19 +134,20 @@ def create_tools(db_path):
 
 
     def speed_index_calculator(input):
-        try:
-            tools = create_code_tools(db_path)
-            code_graph = create_graph(SI_CODE_SYSTEM_MESSAGE, tools)
-            config = {"configurable": {"thread_id": "2"}}
-            response = call_graph(input, config, code_graph)
-            print("CodeCC: ",response)
-            code, result = code_exec(response)
-            value = f"Code: {code}\n Result: {result}"
-            return value
-        except:
-            print('error')
+        # try:
+        #     tools = create_code_tools(db_path)
+        #     code_graph = create_graph(SI_CODE_SYSTEM_MESSAGE, tools)
+        #     config = {"configurable": {"thread_id": "2"}}
+        #     response = call_graph(input, config, code_graph)
+        #     print("CodeCC: ",response)
+        #     code, result = code_exec(response)
+        #     value = f"Code: {code}\n Result: {result}"
+        #     return value
+        # except:
+        #     print('error')
 
-        return "Error"
+        # return "Error"
+        return 0
 
     speed_index_tool = StructuredTool.from_function(
         func=speed_index_calculator,
@@ -485,6 +488,65 @@ def create_tools(db_path):
     )
 
 
+
+    def clean_file(file_path):
+        with open(file_path, 'rb') as file:
+            data = file.read()
+        
+        # Find the start of the PNG file signature
+        png_signature = b'\x89PNG\r\n\x1a\n'
+        start_index = data.find(png_signature)
+        
+        if start_index != -1:
+            # Trim the data to start at the PNG signature
+            cleaned_data = data[start_index:]
+            with open(file_path, 'wb') as file:
+                file.write(cleaned_data)
+        else:
+            raise ValueError("PNG signature not found in file")
+    
+
+    def new_graph_func(input):
+        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        code_llm = llm.with_structured_output(Code)
+        response=code_llm.invoke(input)
+        
+        container_file_path = '/your_db.db'
+        db_content = get_database_content(db_path)
+        print("Dependencies: ", response.dependencies)
+        sandbox = AICodeSandbox(packages=response.dependencies)
+        print("Code: ", response.code)
+        
+        try:
+            sandbox.write_file(container_file_path, db_content)
+            result = sandbox.run_code(response.code)
+            print(result)
+            plot_image = sandbox.read_file('/new.png')
+            with open('new.png', 'wb') as file:
+                file.write(plot_image)
+            print("Plot saved as new.png")
+
+            # clean file
+            clean_file('new.png')
+
+        
+            img_path = 'new.png'
+            img = Image.open(img_path)
+            st.write(img)
+        finally:
+            sandbox.close()
+
+        return response.code, result
+
+
+    new_graph_tool = StructuredTool.from_function(
+        func=new_graph_func,
+        name="new_graph_tool",
+        description="Use this tool when you are asked to run new graph tool. Input code to create a graph."
+    )
+
+
+
     db = SQLDatabase.from_uri(f'sqlite:///{db_path}')
     toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(model="gpt-4o-mini"))
     tools = toolkit.get_tools()
@@ -499,7 +561,7 @@ def create_tools(db_path):
     # create our list of tools
     tools = [map_tool, graph_tool, speed_index_tool, tti_tool, congestion_map_tool, congestion_level_tool, 
              list_tables_tool, get_schema_tool, query_tool, checker_tool, fatality_yearly_comparison_tool, 
-             roadwork_search_tool, report_tool, code_executor]
+             roadwork_search_tool, report_tool, code_executor, new_graph_tool]
     
     # return list of tools that agent can use
     return tools

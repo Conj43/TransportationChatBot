@@ -10,13 +10,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
 import requests
 import sqlite3
+from PIL import Image
 
 # langchain imports
 from langchain_community.utilities.sql_database import SQLDatabase
 
 # imports from other files
 from utils import call_graph, get_streamlit_cb, create_graph
-from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history
+from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history, get_selected_action
 from prompts import AGENT_SYSTEM_MESSAGE
 from tools import create_tools
 
@@ -40,6 +41,28 @@ if "messages" not in st.session_state:
 # Sidebar content
 if st.sidebar.button("Clear History"):
     clear_message_history()
+
+st.sidebar.markdown("---")
+
+
+if st.sidebar.button('Code Gen'):
+    st.sidebar.write('Code Gen Mode Activated!')
+    st.session_state["selected_action"] = "Code Gen"
+
+if st.sidebar.button('SQL Query'):
+    st.sidebar.write('SQL Query Mode Activated!')
+    st.session_state["selected_action"] = "SQL Query"
+
+if st.sidebar.button('Plot Gen'):
+    st.sidebar.write('Plot Gen Mode Activated!')
+    st.session_state["selected_action"] = "Plot Gen"
+
+if st.sidebar.button('Simple Chat'):
+    st.sidebar.write('Simple Chat Mode Activated!')
+    st.session_state["selected_action"] = "Simple Chat"
+
+
+st.sidebar.markdown("---")
 st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
 st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
                     You can map your data by asking TitanBot to map accidents or crashes with specific queries. \
@@ -129,24 +152,40 @@ if st.session_state.db_path is not None:
         tools = create_tools(st.session_state.db_path)
         st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
 
+    if "selected_action" not in st.session_state:
+        st.session_state["selected_action"] = None
+
+    
 
 
-    # displays past messages
+    # Display past messages
     display_chat_messages(st.session_state["messages"])
 
-    # gets the users input 
+    # Get the user's input
     user_query = get_user_query()
 
-    # if user has submitted input
+    # Handle form submission
     if user_query:
-        st.session_state.messages.append({"role": "user", "content": user_query}) # add the input to messages
+        selected_action = st.session_state.get("selected_action", "Submit")
+        st.session_state.messages.append({"role": "user", "content": user_query})
         st.chat_message("user", avatar="💬").write(user_query)
-
+        
         with st.chat_message("assistant", avatar="🤖"):
             st_cb = get_streamlit_cb(st.container())
             config = {"configurable": {"thread_id": "1"}, "callbacks": [st_cb]}
-            response = call_graph(user_query, config, st.session_state.graph) # get the response
-            st.session_state.messages.append({"role": "assistant", "content": response}) # add output to the end of the messages
-            st.write(response) # write it to the screen
+            modified_query = get_selected_action(user_query, selected_action)
+            response = call_graph(modified_query, config, st.session_state.get("graph"))
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.write(response)
 
+        st.session_state["selected_action"] = None
+
+
+    
+    
             
+# MAKE BUTTONS FOR THE FOLLOWING
+# Generate Code for this Query
+# Create and run a SQL Query for this
+# Creae Code and GEneerate a Plot and SHow me
+# Simple Chat
