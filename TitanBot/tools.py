@@ -13,7 +13,9 @@ from geopy.distance import geodesic
 import matplotlib as plt
 from tavily import TavilyClient
 import os
+import io
 from PIL import Image
+import csv
 
 
 # langchain imports
@@ -27,16 +29,14 @@ from langchain_core.messages import SystemMessage, HumanMessage
 # imports from other files
 from calculations import prep_data, arterial_speed_index, calculate_arterial
 from sandbox import AICodeSandbox
-from utils import create_graph, call_graph
 
 
-
+# tavily used to help generate reports
 tavily_api_key = os.getenv('TAVILY_API_KEY')
 
 # function to initialize tools the agent will use
 def create_tools(db_path):
-    conn = sqlite3.connect(db_path) # use db path parameter to crate connection to the selected database
-    
+
 
     # function to display points to a map using streamlit's st.map
     def display_map(input):
@@ -62,74 +62,7 @@ def create_tools(db_path):
     )
 
 
-    def tti_calculator(query,batch_size=200):
-        try:
 
-            # code to use batching is in comments
-
-
-            conn = sqlite3.connect(db_path)
-            # offset = 0
-            # dfs = []
-            # while True:
-            #     batch_query = f"{query} LIMIT {batch_size} OFFSET {offset}"
-            #     df_batch = pd.read_sql_query(batch_query, conn)
-            #     if df_batch.empty:
-            #         break
-            #     dfs.append(df_batch)
-            #     offset += batch_size
-            
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            # result_df = pd.concat(dfs, ignore_index=True)
-            result_df_edit = prep_data(df)
-            total_df = calculate_arterial(result_df_edit)
-            aggregated_df = total_df.groupby(['tmc', 'link', 'month']).agg({
-                        "TTI_mean": "mean"
-                    }).reset_index()
-            yearly_averages = aggregated_df[['TTI_mean']].mean(skipna=True)
-
-            return "Successful Query", yearly_averages
-        
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using tti_calculator!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please rewrite sql_db_schema and then the query and try again using tti_calculator!"
-
-    tti_tool = StructuredTool.from_function(
-        func=tti_calculator,
-        name="tti_tool",
-        description="Use this tool to calculate the Travel Time Index(TTI). The user will ask you to calculate tti, \
-            so you will generate the correct query and input it into this tool. The query you create should query \
-                for all data in the correct table. Make sure your calculations are rounded to 5 decimal places."
-    )
-
-
-
-
-    def speed_index_calculator(input):
-        # try:
-        #     tools = create_code_tools(db_path)
-        #     code_graph = create_graph(SI_CODE_SYSTEM_MESSAGE, tools)
-        #     config = {"configurable": {"thread_id": "2"}}
-        #     response = call_graph(input, config, code_graph)
-        #     print("CodeCC: ",response)
-        #     code, result = code_exec(response)
-        #     value = f"Code: {code}\n Result: {result}"
-        #     return value
-        # except:
-        #     print('error')
-
-        # return "Error"
-        return 0
-
-    speed_index_tool = StructuredTool.from_function(
-        func=speed_index_calculator,
-        name="speed_index_tool",
-        description="Use this tool to calculate speed index. Input is a string explaning the user's request.  \
-                You will get the code and the result of executing the code.  \
-                Display the code to the user to show them how you got your results, then show them your results."
-    )
 
 
     def congestion_map(query, batch_size=1000):
@@ -374,30 +307,41 @@ def create_tools(db_path):
             so you will generate the correct query and input it into this tool. Query for all data from the correct table."
     )
 
+
+
+    # function to generate report
     def report_gen(info):
         llm = ChatOpenAI(model="gpt-4o-mini")
+        # prompt to help llm generate queries for us
         QUERY_PROMPT = """You are a MoDOT employee that is focused on data in Missouri.
                     Your job is to generate an informative and reliable report. 
                     You will be given the user query, and you must generate a list of search queries that will gather 
                     any relevant information. Only generate 3 queries max."""
 
+        # use llm to generate queries t get a more focused search
         queries = llm.with_structured_output(Queries).invoke([
             SystemMessage(content=QUERY_PROMPT),
             HumanMessage(info)
         ])
+
+        # use tavily to find outside info on internet
         tavily = TavilyClient()
         all_responses = []
 
+        # invoke tavily using each of the queries we generated (max of 3)
         for query in queries.queries:
             # print("query: ", query)
             response = tavily.search(query=query, max_results=1)
             
+            # apped results to a list that keeps track of all results
             for r in response['results']:
                 all_responses.append(r)
                 # all_responses.append(r['content'])
                 # print(r['content'])
                 # print(r)
 
+
+        # use llm to then summarize our list of all results
         temp = """You are a MoDOT employee that is focused on data in Missouri.
             You just searched for data and here are the search results:\n
             {compiled_info}\n
@@ -410,10 +354,11 @@ def create_tools(db_path):
 
         response = llm.invoke(prompt)
         
+        # return the summarized info as a report which the agent will use to make a report about the given info
         return response.content
 
 
-
+    # tool that generares the report
     report_tool = StructuredTool.from_function(
         func=report_gen,
         name="report_tool",
@@ -422,97 +367,130 @@ def create_tools(db_path):
                 Do not make any changes to the report, display them directly to the user."
     )
 
-
+    # function to returns database as bytes to be copied into sandbox
     def get_database_content(file_path):
         with open(file_path, 'rb') as file:
             return file.read()
     
+    # function that creates a sandox to execute code generated by agent
+    # input is the code that was generated
     def code_exec(input):
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+        # use model to parse the packages that are needed to run the code
         code_llm = llm.with_structured_output(Code)
+
         response=code_llm.invoke(input)
+
         print("Input: ",input)
-        
+
+        # define the file path to be used
         container_file_path = '/your_db.db'
-        print("dbpath: ",db_path)
+
+        # get db content as bytes
         db_content = get_database_content(db_path)
+
         print("container file path: ",container_file_path)
-        print("Dependencies: ", response.dependencies)
-        sandbox = AICodeSandbox(packages=response.dependencies)
+        print("packages: ", response.packages)
+
+        # create sandbox environment, making sure to pass in the list of packages that need to be installed for us to run the code
+        sandbox = AICodeSandbox(packages=response.packages)
         print("Code: ", response.code)
         
         try:
+            # write the db file to the sandbox using'your_db.db' and bytes of db files
             sandbox.write_file(container_file_path, db_content)
+
+            # run the code that was input
             result = sandbox.run_code(response.code)
+
             print(result)
         finally:
+            # make sure the close sandbox to clean up resources
             sandbox.close()
 
+        # return code that was used and the result that was printed by sandbox
         return response.code, result
 
-
+    # tool to execute the code
     code_executor = StructuredTool.from_function(
         func=code_exec,
         name="code_executor",
         description="Use this tool when you are asked to execute or run code generated by the Agent.\
-              Input a list of the required dependencies, \
+              Input a list of the required packages, \
                 and the python script that needs to be run into this tool. Make sure your input is a string. \
                 You will run the code and return the code and output. Display the code and the result to the user. \
                       Ask if they would like to make any changes to it."
     )
 
 
-
+    # function to change starting point of file to correct place
     def clean_file(file_path):
         with open(file_path, 'rb') as file:
             data = file.read()
         
-        # Find the start of the PNG file signature
+        # find where png file should start
         png_signature = b'\x89PNG\r\n\x1a\n'
-        start_index = data.find(png_signature)
+        start_index = data.find(png_signature) # find new start index
         
         if start_index != -1:
-            # Trim the data to start at the PNG signature
             cleaned_data = data[start_index:]
-            with open(file_path, 'wb') as file:
+            with open(file_path, 'wb') as file: # overwrite the file with correct starting index
                 file.write(cleaned_data)
         else:
             raise ValueError("PNG signature not found in file")
     
-
+    # function used to run code and display a graph
     def new_graph_func(input):
+        # same idea as code executor, just parses the packages and code
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
         code_llm = llm.with_structured_output(Code)
         response=code_llm.invoke(input)
         
+        # define file path for db
         container_file_path = '/your_db.db'
+
+        # get db content in bytes
         db_content = get_database_content(db_path)
-        print("Dependencies: ", response.dependencies)
-        sandbox = AICodeSandbox(packages=response.dependencies)
+
+        print("packages: ", response.packages)
+
+        # initialize sandbox with correct packages
+        sandbox = AICodeSandbox(packages=response.packages)
+
         print("Code: ", response.code)
         
         try:
+            # write the db to the sandbox
             sandbox.write_file(container_file_path, db_content)
+
+            # run the code that was input by agent
             result = sandbox.run_code(response.code)
+
             print(result)
+
+            # read the file from the sandbox
             plot_image = sandbox.read_file('/new.png')
+
+            # write the new file
             with open('new.png', 'wb') as file:
                 file.write(plot_image)
             print("Plot saved as new.png")
 
             # clean file
-            clean_file('new.png')
-
-        
             img_path = 'new.png'
-            img = Image.open(img_path)
-            st.write(img)
+            clean_file(img_path)
+
+
+            img = Image.open(img_path) # open the image
+            st.session_state.messages.append({"role": "set", "content": "set", "image": img}) # create new message with image, the role and content will be set later
+            st.write(img) # display image
         finally:
-            sandbox.close()
+            sandbox.close() # close the sandbox
 
-        return response.code, result
+        return response.code, result # return code and what the code printed
 
-
+    # graphing tool that llm has access to
     graph_tool = StructuredTool.from_function(
         func=new_graph_func,
         name="graph_tool",
@@ -520,7 +498,80 @@ def create_tools(db_path):
     )
 
 
+    # function to save data to csv file and allow users to download it
+    def csv_func(input):
+        # same idea as other functions to parse packages and code
+        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
+        code_llm = llm.with_structured_output(Code)
+        response=code_llm.invoke(input)
 
+        # define path for db in sandbox
+        container_file_path = '/your_db.db'
+
+        # put db content into bytes
+        db_content = get_database_content(db_path)
+
+        print("packages: ", response.packages)
+
+        # initalize sandbox with correct packages
+        sandbox = AICodeSandbox(packages=response.packages)
+
+        print("Code: ", response.code)
+
+        # define filename for csv file
+        filename='data.csv'
+
+        try:
+            # write the db file to the sandbox
+            sandbox.write_file(container_file_path, db_content)
+
+            # run the code in the sandbox
+            result = sandbox.run_code(response.code)
+
+            print(result)
+
+            # read csv from sandbox
+            data = sandbox.read_file('/data.csv')
+
+            try:
+                # create and write to local file to copy csv from sandbox
+                with open(filename, 'w', newline='', encoding='utf-8') as file:
+                    csv_writer = csv.writer(file)
+                    csv_writer.writerows(data)
+                print(f"File saved as {filename}")
+            except Exception as e:
+                raise Exception(f"Failed to write CSV file: {str(e)}")
+                
+            # prepare csv data for inputting the values into the button
+            csv_data = io.StringIO()
+            csv_writer = csv.writer(csv_data)
+            csv_writer.writerows(data)
+            csv_data.seek(0) 
+
+            # create button to download csv 
+            st.download_button(
+                label="Download CSV",
+                data=csv_data.getvalue(),
+                file_name='data.csv',
+                mime='text/csv'
+            )
+
+        finally:
+            # make sure to close sandbox
+            sandbox.close()
+
+        # return code and printed result of code
+        return response.code, result
+
+    # csv tool
+    csv_tool = StructuredTool.from_function(
+        func=csv_func,
+        name="csv_tool",
+        description="Use this tool when you are asked to make a csv file. Input code to create a csv file."
+    )
+
+
+    # initalize sql tools including schema, list tables, query checker and query executor
     db = SQLDatabase.from_uri(f'sqlite:///{db_path}')
     toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(model="gpt-4o-mini"))
     tools = toolkit.get_tools()
@@ -533,34 +584,13 @@ def create_tools(db_path):
 
 
     # create our list of tools
-    tools = [map_tool, speed_index_tool, tti_tool, congestion_map_tool, congestion_level_tool, 
+    tools = [map_tool, congestion_map_tool, congestion_level_tool, 
              list_tables_tool, get_schema_tool, query_tool, checker_tool, fatality_yearly_comparison_tool, 
-             roadwork_search_tool, report_tool, code_executor, graph_tool]
+             roadwork_search_tool, report_tool, code_executor, graph_tool, csv_tool]
     
     # return list of tools that agent can use
     return tools
 
-
-def create_code_tools(db_path):
-    db = SQLDatabase.from_uri(f'sqlite:///{db_path}')
-    toolkit = SQLDatabaseToolkit(db=db, llm=ChatOpenAI(model="gpt-4o-mini"))
-    tools = toolkit.get_tools()
-
-    list_tables_tool = next(tool for tool in tools if tool.name == "sql_db_list_tables")
-    get_schema_tool = next(tool for tool in tools if tool.name == "sql_db_schema")
-
-    tools = [list_tables_tool, get_schema_tool]
-    return tools
-
-
-
-def print_output(output):
-    print(f"Title: {output.plot_title}")
-    print(f"X Values: {output.x_values}")
-    print(f"Y Values: {output.y_values}")
-    print(f"X Axis: {output.x_axis}")
-    print(f"Y Axis: {output.y_axis}")
-    print(f"Description: {output.description}")
 
 
 # defines a class that classifies output from our sql agent as coordinates or not coordinates, we use structured output to easily identify our cases
@@ -572,8 +602,8 @@ class Map(BaseModel):
 
 # class that allows us to define variables for our code execution
 class Code(BaseModel):
-    """Correctly map dependencies that need to be installed."""
-    dependencies: Optional[List[str]] = Field(description="List of dependencies to be installed. sqlite and sqlite3 are already installed, DO NOT include in this list.")
+    """Correctly map packages that need to be installed."""
+    packages: Optional[List[str]] = Field(description="List of packages to be installed. sqlite and sqlite3 are already installed, DO NOT include in this list.")
     code: str = Field(description="Put the python code into this field.")
 
 

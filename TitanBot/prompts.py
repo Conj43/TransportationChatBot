@@ -1,6 +1,8 @@
 
 
-
+# message that is used to create our agent
+# pre define things like file paths that we create in the sandbox so we can easily copy them from the sandbox into our local environment
+# give a brief description of how we want our main calculations to take place
 
 AGENT_SYSTEM_MESSAGE = {
         "role": "system",
@@ -11,6 +13,7 @@ AGENT_SYSTEM_MESSAGE = {
                   Always generate queries with the correct sqlite syntax. Do not suggest queries that will not run using sqlite.
                     Anytime you generate code use '/your_db.db' as the path for the db connection.
                     When generating plots or images, save them as '/new.png'
+                    When generating csv files save them as '/data.csv'
                     Use python code to do the following when asked:
                     group by tmc and link and only calculate for AM(6,7,8) and PM(15,16,17) peak hours when calculating the following:
                     Speed Index is calculated as 85th percentile of speed over average free flow speed. Calculate one value for AM, one value for PM.

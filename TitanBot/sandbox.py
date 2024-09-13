@@ -1,3 +1,7 @@
+# code used from https://github.com/typper-io/ai-code-sandbox
+# has bene modified to fit our needs
+
+
 import docker
 import shlex
 import uuid
@@ -7,6 +11,7 @@ import tarfile
 import io
 from io import BytesIO
 import time
+import csv
 
 class AICodeSandbox:
     """
@@ -22,7 +27,7 @@ class AICodeSandbox:
         temp_image (docker.models.images.Image): Temporary Docker image created for the sandbox.
     """
 
-    def __init__(self, custom_image=None, packages=None, network_mode="none", mem_limit="100m", cpu_period=100000, cpu_quota=50000):
+    def __init__(self, custom_image=None, packages=None, network_mode="none", mem_limit="400m", cpu_period=100000, cpu_quota=50000):
         """
         Initialize the PythonSandbox.
 
@@ -76,7 +81,7 @@ class AICodeSandbox:
             content = content.encode('utf-8')
 
         directory = os.path.dirname(filename)
-        if directory:
+        if directory and directory != '/':
             mkdir_command = f'mkdir -p {shlex.quote(directory)}'
             mkdir_result = self.container.exec_run(["sh", "-c", mkdir_command])
             if mkdir_result.exit_code != 0:
@@ -93,7 +98,7 @@ class AICodeSandbox:
 
         try:
             # Upload the tar archive to the container
-            self.container.put_archive('/', tar_stream)
+            self.container.put_archive(os.path.dirname(filename), tar_stream)
         except Exception as e:
             raise Exception(f"Failed to write file: {str(e)}")
 
@@ -103,6 +108,7 @@ class AICodeSandbox:
         if check_result.exit_code != 0:
             raise Exception(f"Failed to write file: {filename}")
 
+    
     def read_file(self, filename):
         """
         Read content from a file in the sandbox.
@@ -123,13 +129,29 @@ class AICodeSandbox:
 
             # Attempt to decode as UTF-8 text
             try:
-                return file_content.decode('utf-8')
+                decoded_content = file_content.decode('utf-8')
             except UnicodeDecodeError:
                 # If decoding fails, return as binary data
                 return file_content
 
+            # Additional check for CSV files
+            if filename.lower().endswith('.csv'):
+                try:
+                    # Parse CSV content
+                    csv_reader = csv.reader(io.StringIO(decoded_content))
+                    return list(csv_reader)
+                except Exception as e:
+                    raise Exception(f"Failed to parse CSV file: {str(e)}")
+
+            # Return decoded content if not CSV
+            return decoded_content
+
         except Exception as e:
             raise Exception(f"Failed to read file: {str(e)}")
+
+
+
+
 
 
     def run_code(self, code, env_vars=None):

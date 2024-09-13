@@ -10,7 +10,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
 import requests
 import sqlite3
-from PIL import Image
 
 # langchain imports
 from langchain_community.utilities.sql_database import SQLDatabase
@@ -35,7 +34,7 @@ if "db_path" not in st.session_state:
     st.session_state.db_path = None
 
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?"}]
+    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None}]
 
 
 
@@ -45,17 +44,18 @@ if st.sidebar.button("Clear History"):
     clear_message_history()
 
 
-
-st.sidebar.subheader("Welcome to our Transportation Database Assistant!")
+# sidebar information
+st.sidebar.subheader("Welcome to TitanBot!")
 st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
-                    You can map your data by asking TitanBot to map accidents or crashes with specific queries. \
-                    You can also visualize your data by asking TitanBot to graph queried data for you!")
+                    Use the different buttons to specify what task you'd like TitanBot to perform. Click the button first, \
+                    then it will show it has been activated. Then you may submit your query or question, and TitanBot will use \
+                    it's tool to best answer your request.")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Database Upload")
 st.sidebar.markdown("Upload a SQLite .db file for analysis.")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
 
-# Handle file upload
+# upload db
 if uploaded_file is not None:
     if uploaded_file.name.endswith('.db'):
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
@@ -124,7 +124,7 @@ if st.session_state.db_path is not None:
     db_url = URL.create( 
         drivername="sqlite",
         database=st.session_state.db_path,
-        query={"mode": "ro"}
+        query={"mode": "ro"} # open in read only mode
     )
     engine = create_engine(db_url)
     db = SQLDatabase(engine)
@@ -135,10 +135,10 @@ if st.session_state.db_path is not None:
         tools = create_tools(st.session_state.db_path)
         st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
 
+    # used with buttons to help narrow focus
     if "selected_action" not in st.session_state:
         st.session_state["selected_action"] = None
 
-    
 
 
     # Display past messages
@@ -147,49 +147,54 @@ if st.session_state.db_path is not None:
     # Get the user's input
     user_query = get_user_query()
 
-    # Handle form submission
+    # when the users enters a char
     if user_query:
-        selected_action = st.session_state.get("selected_action", "Submit")
-        st.session_state.messages.append({"role": "user", "content": user_query})
+        selected_action = st.session_state.get("selected_action", "Submit") # get the selected action (buttons determine selected action)
+        st.session_state.messages.append({"role": "user", "content": user_query, "image": None}) # add message to history to display
         st.chat_message("user", avatar="💬").write(user_query)
         
         with st.chat_message("assistant", avatar="🤖"):
-            st_cb = get_streamlit_cb(st.container())
-            config = {"configurable": {"thread_id": "1"}, "callbacks": [st_cb]}
-            modified_query = get_selected_action(user_query, selected_action)
-            response = call_graph(modified_query, config, st.session_state.get("graph"))
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.write(response)
+            st_cb = get_streamlit_cb(st.container()) # modified function to define callbacks using langgraph
+            config = {"configurable": {"thread_id": "1"}, "callbacks": [st_cb]} # set the config using thread id and callbacks to dispay to streamlit container
+            modified_query = get_selected_action(user_query, selected_action) # depending on selected action, we will modify the query to help narrow focus
+            response = call_graph(modified_query, config, st.session_state.get("graph")) # invoke the graph
+            last_message = st.session_state.messages[-1] # check if this message display a png or image
+            if last_message.get("image"):
+                last_message["role"] = "assistant" # we need to redefine role and content if we have an image because we create the message in tools.py in graph_tool
+                last_message["content"] = response
+            else:
+                st.session_state.messages.append({"role": "assistant", "content": response, "image": None}) # if there is no png, or image just keep image as none
+            st.write(response) # write response to screen
 
-        st.session_state["selected_action"] = None
-col1, col2, col3, col4 = st.columns(4)
+        st.session_state["selected_action"] = None # reset selected action
 
-placeholder = st.empty()
-with placeholder.container():
-    with col1:
-        if st.button('Code Gen'):
-            st.write('Activated!')
-            st.session_state["selected_action"] = "Code Gen"
+    col1, col2, col3, col4, col5 = st.columns(5) # define conlumns for action buttons
 
-    with col2:
-        if st.button('SQL Query'):
-            st.write('Activated!')
-            st.session_state["selected_action"] = "SQL Query"
+    placeholder = st.empty()
+    with placeholder.container(): # put each button in its own column in a container
+        with col1: # used to generate code
+            if st.button('Code Gen'):
+                st.write('Activated!')
+                st.session_state["selected_action"] = "Code Gen"
 
-    with col3:
-        if st.button('Plot Gen'):
-            st.write('Activated!')
-            st.session_state["selected_action"] = "Plot Gen"
-    with col4:
-        if st.button('Simple Chat'):
-            st.write(' Activated!')
-            st.session_state["selected_action"] = "Simple Chat"
+        with col2: # used to generate and execute sql queries
+            if st.button('SQL Query'):
+                st.write('Activated!')
+                st.session_state["selected_action"] = "SQL Query"
+
+        with col3:
+            if st.button('Plot Gen'): # used when you want to execute code that generates a plot
+                st.write('Activated!')
+                st.session_state["selected_action"] = "Plot Gen"
+        with col4:
+            if st.button('CSV Gen'): # used when you want to execute code that generates a csv file
+                st.write(' Activated!')
+                st.session_state["selected_action"] = "CSV Gen"
+        with col5:
+            if st.button('Simple Chat'): # used to just chat with TitanBot 
+                st.write(' Activated!')
+                st.session_state["selected_action"] = "Simple Chat"
+
+                # you can still generate code and sql queries using simple chat, but it is helpful to TitanBot to define what you are trying to do
 
     
-    
-            
-# MAKE BUTTONS FOR THE FOLLOWING
-# Generate Code for this Query
-# Create and run a SQL Query for this
-# Creae Code and GEneerate a Plot and SHow me
-# Simple Chat

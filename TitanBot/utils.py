@@ -57,7 +57,7 @@ def get_streamlit_cb(parent_container: DeltaGenerator):
 
 
 
-# function to create graph
+# function to create graph, pass in system message and tools for graph
 def create_graph(system_message, tools):
 
     memory = MemorySaver() # initalize memory
