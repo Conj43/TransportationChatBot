@@ -2,14 +2,12 @@
 # streamlit run main.py --server.maxUploadSize 400
 
 # imports
-import os
-import tempfile
+import os, tempfile, requests, sqlite3
 from dotenv import load_dotenv
 import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.engine.url import URL
-import requests
-import sqlite3
+
 
 # langchain imports
 from langchain_community.utilities.sql_database import SQLDatabase
@@ -34,7 +32,7 @@ if "db_path" not in st.session_state:
     st.session_state.db_path = None
 
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None}]
+    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None, "file_data": None, "filename": None}]
 
 
 
@@ -150,7 +148,7 @@ if st.session_state.db_path is not None:
     # when the users enters a char
     if user_query:
         selected_action = st.session_state.get("selected_action", "Submit") # get the selected action (buttons determine selected action)
-        st.session_state.messages.append({"role": "user", "content": user_query, "image": None}) # add message to history to display
+        st.session_state.messages.append({"role": "user", "content": user_query, "image": None, "file_data": None, "filename": None}) # add message to history to display
         st.chat_message("user", avatar="💬").write(user_query)
         
         with st.chat_message("assistant", avatar="🤖"):
@@ -162,8 +160,11 @@ if st.session_state.db_path is not None:
             if last_message.get("image"):
                 last_message["role"] = "assistant" # we need to redefine role and content if we have an image because we create the message in tools.py in graph_tool
                 last_message["content"] = response
+            elif last_message.get("file_data"):
+                last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
+                last_message["content"] = response
             else:
-                st.session_state.messages.append({"role": "assistant", "content": response, "image": None}) # if there is no png, or image just keep image as none
+                st.session_state.messages.append({"role": "assistant", "content": response, "image": None, "file_data": None, "filename": None}) # if there is no png, or image just keep image as none
             st.write(response) # write response to screen
 
         st.session_state["selected_action"] = None # reset selected action
