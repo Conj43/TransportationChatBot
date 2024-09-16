@@ -17,6 +17,13 @@ def display_chat_messages(messages):
             avatar = "💬"
         if msg.get("image") is not None:
             st.image(msg["image"], caption='Generated Image', use_column_width=True)
+        if msg.get("file_data") is not None:
+            st.download_button(
+                label=f"Download {msg["filename"]}",
+                data=msg["file_data"],
+                file_name=msg["filename"],
+                mime='text/csv'
+            )
         st.chat_message(msg["role"], avatar=avatar).write(msg["content"]) # write past message to the ui
 
 
@@ -27,7 +34,7 @@ def get_user_query():
 # function to clear the message history, also clears the chat history for the bot
 def clear_message_history():
     if st.session_state["messages"] is not None:
-        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None}]
+        st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None, "file_data": None, "filename": None}]
     if "graph" != None:
         tools = create_tools(st.session_state.db_path)
         st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)

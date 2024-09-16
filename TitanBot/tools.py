@@ -1,21 +1,17 @@
 # main file is main.py
 
 # imports
-import sqlite3
+import sqlite3, os, io, csv, folium
 from typing import List, Any, Optional, Tuple
 import pandas as pd
 import streamlit as st
-import folium
 from streamlit_folium import folium_static
 import osmnx as ox
 import geopandas as gpd
 from geopy.distance import geodesic
 import matplotlib as plt
 from tavily import TavilyClient
-import os
-import io
 from PIL import Image
-import csv
 
 
 # langchain imports
@@ -424,21 +420,7 @@ def create_tools(db_path):
     )
 
 
-    # function to change starting point of file to correct place
-    def clean_file(file_path):
-        with open(file_path, 'rb') as file:
-            data = file.read()
-        
-        # find where png file should start
-        png_signature = b'\x89PNG\r\n\x1a\n'
-        start_index = data.find(png_signature) # find new start index
-        
-        if start_index != -1:
-            cleaned_data = data[start_index:]
-            with open(file_path, 'wb') as file: # overwrite the file with correct starting index
-                file.write(cleaned_data)
-        else:
-            raise ValueError("PNG signature not found in file")
+
     
     # function used to run code and display a graph
     def new_graph_func(input):
@@ -449,6 +431,9 @@ def create_tools(db_path):
         
         # define file path for db
         container_file_path = '/your_db.db'
+
+        # define img path
+        img_path = 'new.png'
 
         # get db content in bytes
         db_content = get_database_content(db_path)
@@ -470,20 +455,16 @@ def create_tools(db_path):
             print(result)
 
             # read the file from the sandbox
-            plot_image = sandbox.read_file('/new.png')
+            plot_image = sandbox.read_file(img_path)
 
             # write the new file
-            with open('new.png', 'wb') as file:
+            with open(img_path, 'wb') as file:
                 file.write(plot_image)
-            print("Plot saved as new.png")
-
-            # clean file
-            img_path = 'new.png'
-            clean_file(img_path)
+            print(f"Plot saved as {img_path}")
 
 
             img = Image.open(img_path) # open the image
-            st.session_state.messages.append({"role": "set", "content": "set", "image": img}) # create new message with image, the role and content will be set later
+            st.session_state.messages.append({"role": "set", "content": "set", "image": img, "file_data": None, "filename": None}) # create new message with image, the role and content will be set later
             st.write(img) # display image
         finally:
             sandbox.close() # close the sandbox
@@ -499,7 +480,7 @@ def create_tools(db_path):
 
 
     # function to save data to csv file and allow users to download it
-    def csv_func(input):
+    def csv_func(input, filename):
         # same idea as other functions to parse packages and code
         llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
         code_llm = llm.with_structured_output(Code)
@@ -507,6 +488,8 @@ def create_tools(db_path):
 
         # define path for db in sandbox
         container_file_path = '/your_db.db'
+
+        file_path = filename
 
         # put db content into bytes
         db_content = get_database_content(db_path)
@@ -518,8 +501,6 @@ def create_tools(db_path):
 
         print("Code: ", response.code)
 
-        # define filename for csv file
-        filename='data.csv'
 
         try:
             # write the db file to the sandbox
@@ -531,31 +512,24 @@ def create_tools(db_path):
             print(result)
 
             # read csv from sandbox
-            data = sandbox.read_file('/data.csv')
+            data = sandbox.read_file(file_path)
 
-            try:
-                # create and write to local file to copy csv from sandbox
-                with open(filename, 'w', newline='', encoding='utf-8') as file:
-                    csv_writer = csv.writer(file)
-                    csv_writer.writerows(data)
-                print(f"File saved as {filename}")
-            except Exception as e:
-                raise Exception(f"Failed to write CSV file: {str(e)}")
-                
             # prepare csv data for inputting the values into the button
             csv_data = io.StringIO()
             csv_writer = csv.writer(csv_data)
             csv_writer.writerows(data)
             csv_data.seek(0) 
 
+            print(csv_data.getvalue())
+            # print(data)
             # create button to download csv 
             st.download_button(
-                label="Download CSV",
+                label=f"Download {file_path}",
                 data=csv_data.getvalue(),
-                file_name='data.csv',
+                file_name=file_path,
                 mime='text/csv'
             )
-
+            st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": csv_data.getvalue(), "filename": filename}) # create new message with btn, the role and content will be set later
         finally:
             # make sure to close sandbox
             sandbox.close()
@@ -567,7 +541,7 @@ def create_tools(db_path):
     csv_tool = StructuredTool.from_function(
         func=csv_func,
         name="csv_tool",
-        description="Use this tool when you are asked to make a csv file. Input code to create a csv file."
+        description="Use this tool when you are asked to make a csv file. Input code to create a csv file. Input name for csv file used in code."
     )
 
 
@@ -603,7 +577,9 @@ class Map(BaseModel):
 # class that allows us to define variables for our code execution
 class Code(BaseModel):
     """Correctly map packages that need to be installed."""
-    packages: Optional[List[str]] = Field(description="List of packages to be installed. sqlite and sqlite3 are already installed, DO NOT include in this list.")
+    packages: Optional[List[str]] = Field(description="Read all imports in python code. Make a list of packages to be installed. \
+                                          sqlite and sqlite3 are already installed, DO NOT include in this list. Make sure to look at all imports. \
+                                          Common imports are pandas, matplotlib and numpy.")
     code: str = Field(description="Put the python code into this field.")
 
 

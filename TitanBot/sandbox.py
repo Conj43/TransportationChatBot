@@ -2,16 +2,9 @@
 # has bene modified to fit our needs
 
 
-import docker
-import shlex
-import uuid
-import textwrap
-import os
-import tarfile
-import io
+import docker, shlex, uuid, textwrap, os, tarfile, io, time, csv
 from io import BytesIO
-import time
-import csv
+
 
 class AICodeSandbox:
     """
@@ -123,31 +116,52 @@ class AICodeSandbox:
             Exception: If reading the file fails.
         """
         try:
-            # Read file content as binary
-            bits, stat = self.container.get_archive(filename)
-            file_content = b"".join(bits)
+            # Read file content as a tar archive
+            bits, _ = self.container.get_archive(filename)
+            
+            # Extract file content from tar archive
+            tar_stream = io.BytesIO(b''.join(bits))
+            with tarfile.open(fileobj=tar_stream, mode='r') as tar:
+                # List all members to find exact name
+                members = tar.getmembers()
+                filenames_in_tar = [member.name for member in members]
+                # Debugging: Print filenames in the tar archive
+                # for member in tar.getmembers():
+                #     print(member.name)
 
-            # Attempt to decode as UTF-8 text
-            try:
-                decoded_content = file_content.decode('utf-8')
-            except UnicodeDecodeError:
-                # If decoding fails, return as binary data
-                return file_content
+                
+                # Check if the file exists in the tar archive
+                if filename not in filenames_in_tar:
+                    raise Exception(f"File '{filename}' not found in the tar archive.")
+                
+                # Extract the specific file
+                file = tar.extractfile(filename)
+                if file is not None:
+                    file_content = file.read()
 
-            # Additional check for CSV files
-            if filename.lower().endswith('.csv'):
-                try:
-                    # Parse CSV content
-                    csv_reader = csv.reader(io.StringIO(decoded_content))
-                    return list(csv_reader)
-                except Exception as e:
-                    raise Exception(f"Failed to parse CSV file: {str(e)}")
+                    # Attempt to decode as UTF-8 text
+                    try:
+                        decoded_content = file_content.decode('utf-8')
+                        # Additional check for CSV files
+                        if filename.lower().endswith('.csv'):
+                            try:
+                                # Parse CSV content
+                                csv_reader = csv.reader(io.StringIO(decoded_content))
+                                return list(csv_reader)
+                            except Exception as e:
+                                raise Exception(f"Failed to parse CSV file: {str(e)}")
 
-            # Return decoded content if not CSV
-            return decoded_content
+                        return decoded_content
+
+                    except UnicodeDecodeError:
+                        # Return as binary data if decoding fails
+                        return file_content
+                else:
+                    raise Exception(f"Failed to extract file from archive: {filename}")
 
         except Exception as e:
             raise Exception(f"Failed to read file: {str(e)}")
+
 
 
 
@@ -235,7 +249,4 @@ class AICodeSandbox:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit point."""
         self.close()
-
-
-
 
