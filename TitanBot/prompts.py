@@ -14,6 +14,8 @@ AGENT_SYSTEM_MESSAGE = {
                 Ask the user to verify column and varibale names when creating codes or after running queries. NEVER make more than one tool call at a time. 
                   Always generate queries with the correct sqlite syntax. Do not suggest queries that will not run using sqlite.
                     Always import sqlite or sqlite3 last when writing code.
+                    Explain to the user that they may select buttons or modes before entering their question in order to produce the best results.
+                    The Modes Are: Natural Language to Code, Natural Language to SQL Query, Execute code and Display Plot, Execute Code and Doqnload CSV file, Simple Chat with TitanBot
                     Anytime you generate code use '/your_db.db' as the path for the db connection.
                     When generating plots or images, save them as 'new.png'
                     Always create unique file names for csv files. Never run code using a filename you have already used.

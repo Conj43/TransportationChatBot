@@ -4,7 +4,9 @@
 
 # imports 
 from typing import Annotated
-import inspect
+import inspect, sqlite3, tempfile, os, re, requests
+import streamlit as st
+import pandas as pd
 from typing import Callable, TypeVar
 from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 from streamlit.delta_generator import DeltaGenerator
@@ -33,6 +35,7 @@ def call_graph(user_input, config, graph):
     # snapshot = graph.get_state(config)
     # print(snapshot)
     return response["messages"][-1].content
+
 
 
 # function to get around streamlit callback handler
@@ -66,9 +69,7 @@ def create_graph(system_message, tools):
     class State(TypedDict):
         messages: Annotated[list, add_messages]
     
-    
     graph_builder = StateGraph(State)
-
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # define llm
     tools = tools # set tools equal to tools
@@ -91,10 +92,7 @@ def create_graph(system_message, tools):
     graph_builder.add_node("tools", tool_node)
 
     # add conditional edges
-    graph_builder.add_conditional_edges(
-        "chatbot",
-        tools_condition,
-    )
+    graph_builder.add_conditional_edges("chatbot",tools_condition,)
 
     # add edge from tools to chatbot
     graph_builder.add_edge("tools", "chatbot")
@@ -106,6 +104,137 @@ def create_graph(system_message, tools):
     graph = graph_builder.compile(checkpointer=memory)
 
     return graph # return graph
+
+
+
+
+
+
+
+def invoke_titanbot(user_query):
+    selected_action = st.session_state.get("selected_action", "Submit") # get the selected action (buttons determine selected action)
+    st.session_state.messages.append({"role": "user", "content": user_query, "image": None, "file_data": None, "filename": None}) # add message to history to display
+    st.chat_message("user", avatar="💬").write(user_query)
+    
+    with st.chat_message("assistant", avatar="🤖"):
+        st_cb = get_streamlit_cb(st.container()) # modified function to define callbacks using langgraph
+        config = {"configurable": {"thread_id": "1"}, "callbacks": [st_cb]} # set the config using thread id and callbacks to dispay to streamlit container
+        modified_query = get_selected_action(user_query, selected_action) # depending on selected action, we will modify the query to help narrow focus
+        response = call_graph(modified_query, config, st.session_state.get("graph")) # invoke the graph
+        last_message = st.session_state.messages[-1] # check if this message display a png or image
+        if last_message.get("image"):
+            last_message["role"] = "assistant" # we need to redefine role and content if we have an image because we create the message in tools.py in graph_tool
+            last_message["content"] = response
+        elif last_message.get("file_data"):
+            last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
+            last_message["content"] = response
+        else:
+            st.session_state.messages.append({"role": "assistant", "content": response, "image": None, "file_data": None, "filename": None}) # if there is no png, or image just keep image as none
+        st.write(response) # write response to screen
+
+    st.session_state["selected_action"] = None # reset selected action
+
+
+
+
+
+
+def create_db_from_uploaded_csv(uploaded_csv_files):
+    # Create a temporary SQLite database file
+    temp_db_file = tempfile.NamedTemporaryFile(delete=False, suffix='.db')
+    temp_db_file_path = temp_db_file.name
+    temp_db_file.close()
+
+    try:
+        with sqlite3.connect(temp_db_file_path) as conn:
+            for uploaded_csv_file in uploaded_csv_files:
+                if uploaded_csv_file.type == 'text/csv':
+                    # Read CSV file into pandas DataFrame
+                    df = pd.read_csv(uploaded_csv_file)
+                    df.columns = df.columns.str.replace(' ', '_')  # Replace spaces in column names with underscores
+
+                    # Create table and insert data
+                    table_name = os.path.splitext(uploaded_csv_file.name)[0]
+                    new_table_name = re.sub(r'\W|^(?=\d)', '_', table_name)
+                    df.to_sql(new_table_name, conn, if_exists='replace', index=False)
+                    # print(f"Table '{table_name}' created and data inserted.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+
+    return temp_db_file_path
+
+
+
+
+
+
+# Function to fetch data from URL and save as SQLite .db file
+def fetch_data_and_create_db(url, db_file_path):
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        conn = sqlite3.connect(db_file_path)
+        cursor = conn.cursor()
+
+        # Assuming data['active'] is a list of dictionaries
+        if 'active' in data:
+            sample_row = data['active'][0]
+            columns = sample_row.keys()
+
+            # Create table dynamically
+            column_definitions = ', '.join([f"{col} TEXT" for col in columns])
+            create_table_sql = f"CREATE TABLE IF NOT EXISTS traffic_data ({column_definitions})"
+            cursor.execute(create_table_sql)
+
+            # Insert data dynamically
+            for row in data['active']:
+                columns = ', '.join(row.keys())
+                placeholders = ', '.join(['?'] * len(row))
+                sql = f"INSERT INTO traffic_data ({columns}) VALUES ({placeholders})"
+                cursor.execute(sql, list(row.values()))
+
+            conn.commit()
+            conn.close()
+            return db_file_path
+        else:
+            st.sidebar.error("Error: JSON does not contain 'active' key.")
+            return None
+    else:
+        st.sidebar.error(f"Error: Unable to fetch data from URL. Status code: {response.status_code}")
+        return None
+    
+
+
+
+# modify user query based on current selected action
+def get_selected_action(user_query, selected_action):
+    if selected_action == "Code Gen":
+        return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math \
+            should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate."
+    
+    elif selected_action == "SQL Query":
+        return "First look at the schema for all tables in this database. Then generate a sql query to answer this input from the user: " + user_query  + " Then run the query \
+            you generated and tell me the results."
+    
+    elif selected_action == "Plot Gen":
+        return "Use the most recent code and input it into graph_tool. Make sure to print the information that will be used to make the graph. \
+            Here is the user's query: " + user_query + " If their query does not relate, or the code is not meant to be graphed, ask them for clarification. \
+                You may generate some code if there has been no code generated in your conversation yet."
+    
+    elif selected_action == "CSV Gen":
+        return "Use the most recent code and input it into csv_tool. Print out the first 10 lines to display to the user. \
+            Here is the user's query: " + user_query + " If their query does not relate, \
+            or the code is not able to save a csv, ask for clarification. You may generate some code if there has been no code generated in your conversation yet."
+    
+    elif selected_action == "Simple Chat":
+        return user_query
+    
+    else:
+        return user_query # no modifiaction
+
+
+
 
 
 
