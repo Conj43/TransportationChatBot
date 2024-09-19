@@ -1,7 +1,7 @@
 # main file is main.py
 
 # imports
-import sqlite3, os, io, csv, folium
+import sqlite3, os, io, csv, folium, ast
 from typing import List, Any, Optional, Tuple
 import pandas as pd
 import streamlit as st
@@ -386,11 +386,12 @@ def create_tools(db_path):
         # get db content as bytes
         db_content = get_database_content(db_path)
 
-        print("container file path: ",container_file_path)
-        print("packages: ", response.packages)
+
 
         # create sandbox environment, making sure to pass in the list of packages that need to be installed for us to run the code
-        sandbox = AICodeSandbox(packages=response.packages)
+        packages = parse_packages(input)
+        print("Using Parser: ",packages)
+        sandbox = AICodeSandbox(packages=packages)
         print("Code: ", response.code)
         
         try:
@@ -438,10 +439,9 @@ def create_tools(db_path):
         # get db content in bytes
         db_content = get_database_content(db_path)
 
-        print("packages: ", response.packages)
-
-        # initialize sandbox with correct packages
-        sandbox = AICodeSandbox(packages=response.packages)
+        packages = parse_packages(input)
+        print("Using Parser: ",packages)
+        sandbox = AICodeSandbox(packages=packages)
 
         print("Code: ", response.code)
         
@@ -494,10 +494,9 @@ def create_tools(db_path):
         # put db content into bytes
         db_content = get_database_content(db_path)
 
-        print("packages: ", response.packages)
-
-        # initalize sandbox with correct packages
-        sandbox = AICodeSandbox(packages=response.packages)
+        packages = parse_packages(input)
+        print("Using Parser: ",packages)
+        sandbox = AICodeSandbox(packages=packages)
 
         print("Code: ", response.code)
 
@@ -520,7 +519,7 @@ def create_tools(db_path):
             csv_writer.writerows(data)
             csv_data.seek(0) 
 
-            print(csv_data.getvalue())
+            # print(csv_data.getvalue())
             # print(data)
             # create button to download csv 
             st.download_button(
@@ -565,7 +564,27 @@ def create_tools(db_path):
     # return list of tools that agent can use
     return tools
 
+def parse_packages(code):
+        """Parse the code to extract packages and exclude specific ones."""
+        excluded_packages = {"sqlite3", "json", "os", "math", "datetime", "random", "sys"}
+        package_set = set()
 
+
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        package_set.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:  # Ensure there is a module
+                        package_set.add(node.module)
+        except SyntaxError as e:
+            print(f"Syntax error in code: {e}")
+
+        # Exclude the specified packages
+        packages = [pkg for pkg in package_set if pkg not in excluded_packages]
+        return packages
 
 # defines a class that classifies output from our sql agent as coordinates or not coordinates, we use structured output to easily identify our cases
 class Map(BaseModel):
@@ -576,10 +595,7 @@ class Map(BaseModel):
 
 # class that allows us to define variables for our code execution
 class Code(BaseModel):
-    """Correctly map packages that need to be installed."""
-    packages: Optional[List[str]] = Field(description="Read all imports in python code. Make a list of packages to be installed. \
-                                          sqlite and sqlite3 are already installed, DO NOT include in this list. Make sure to look at all imports. \
-                                          Common imports are pandas, matplotlib and numpy.")
+    """Correctly put python code into code."""
     code: str = Field(description="Put the python code into this field.")
 
 

@@ -223,7 +223,7 @@ def get_selected_action(user_query, selected_action):
                 You may generate some code if there has been no code generated in your conversation yet."
     
     elif selected_action == "CSV Gen":
-        return "Use the most recent code and input it into csv_tool. Print out the first 10 lines to display to the user. \
+        return "Use the most recent code and input it into csv_tool. In your code print out the first 10 lines of the csv file to display to the user. \
             Here is the user's query: " + user_query + " If their query does not relate, \
             or the code is not able to save a csv, ask for clarification. You may generate some code if there has been no code generated in your conversation yet."
     
