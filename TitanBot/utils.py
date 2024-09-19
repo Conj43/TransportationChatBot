@@ -232,9 +232,3 @@ def get_selected_action(user_query, selected_action):
     
     else:
         return user_query # no modifiaction
-
-
-
-
-
-

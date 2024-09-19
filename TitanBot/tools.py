@@ -565,26 +565,32 @@ def create_tools(db_path):
     return tools
 
 def parse_packages(code):
-        """Parse the code to extract packages and exclude specific ones."""
-        excluded_packages = {"sqlite3", "json", "os", "math", "datetime", "random", "sys"}
-        package_set = set()
+    """Parse the code to extract packages and exclude specific ones."""
+    excluded_packages = {"sqlite3", "json", "os", "math", "datetime", "random", "sys"}
+    package_set = set()
+
+    def get_top_level_package(package_name):
+        """Get the top-level package name."""
+        return package_name.split('.')[0]
+
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    package_set.add(get_top_level_package(alias.name))
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:  # Ensure there is a module
+                    package_set.add(get_top_level_package(node.module))
+    except SyntaxError as e:
+        print(f"Syntax error in code: {e}")
+
+    # Exclude the specified packages
+    packages = [pkg for pkg in package_set if pkg not in excluded_packages]
+    
+    return packages
 
 
-        try:
-            tree = ast.parse(code)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        package_set.add(alias.name)
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:  # Ensure there is a module
-                        package_set.add(node.module)
-        except SyntaxError as e:
-            print(f"Syntax error in code: {e}")
-
-        # Exclude the specified packages
-        packages = [pkg for pkg in package_set if pkg not in excluded_packages]
-        return packages
 
 # defines a class that classifies output from our sql agent as coordinates or not coordinates, we use structured output to easily identify our cases
 class Map(BaseModel):
@@ -609,6 +615,3 @@ def create_map_llm():
 
 class Queries(BaseModel):
     queries: List[str]
-
-
-
