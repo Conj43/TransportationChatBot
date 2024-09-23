@@ -215,7 +215,7 @@ def get_selected_action(user_query, selected_action):
     if selected_action == "Code Gen":
         return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math \
             should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate. \
-                You dont need to show schema unless asked to. Use folium to make the maps."
+                You dont need to show schema unless asked to."
     
     elif selected_action == "SQL Query":
         return "First look at the schema for all tables in this database. Then generate a sql query to answer this input from the user: " + user_query  + " Then run the query \
