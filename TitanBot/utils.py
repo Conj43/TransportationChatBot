@@ -113,7 +113,7 @@ def create_graph(system_message, tools):
 
 def invoke_titanbot(user_query):
     selected_action = st.session_state.get("selected_action", "Submit") # get the selected action (buttons determine selected action)
-    st.session_state.messages.append({"role": "user", "content": user_query, "image": None, "file_data": None, "filename": None}) # add message to history to display
+    st.session_state.messages.append({"role": "user", "content": user_query, "image": None, "file_data": None, "filename": None, "html": None}) # add message to history to display
     st.chat_message("user", avatar="💬").write(user_query)
     
     with st.chat_message("assistant", avatar="🤖"):
@@ -128,8 +128,11 @@ def invoke_titanbot(user_query):
         elif last_message.get("file_data"):
             last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
             last_message["content"] = response
+        elif last_message.get("html"):
+            last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
+            last_message["content"] = response
         else:
-            st.session_state.messages.append({"role": "assistant", "content": response, "image": None, "file_data": None, "filename": None}) # if there is no png, or image just keep image as none
+            st.session_state.messages.append({"role": "assistant", "content": response, "image": None, "file_data": None, "filename": None, "html": None}) # if there is no png, or image just keep image as none
         st.write(response) # write response to screen
 
     st.session_state["selected_action"] = None # reset selected action
@@ -211,24 +214,25 @@ def fetch_data_and_create_db(url, db_file_path):
 def get_selected_action(user_query, selected_action):
     if selected_action == "Code Gen":
         return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math \
-            should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate."
+            should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate. \
+                You dont need to show schema unless asked to. Use folium to make the maps."
     
     elif selected_action == "SQL Query":
         return "First look at the schema for all tables in this database. Then generate a sql query to answer this input from the user: " + user_query  + " Then run the query \
             you generated and tell me the results."
     
-    elif selected_action == "Plot Gen":
-        return "Use the most recent code and input it into graph_tool. Make sure to print the information that will be used to make the graph. \
-            Here is the user's query: " + user_query + " If their query does not relate, or the code is not meant to be graphed, ask them for clarification. \
-                You may generate some code if there has been no code generated in your conversation yet."
-    
-    elif selected_action == "CSV Gen":
-        return "Use the most recent code and input it into csv_tool. In your code print out the first 10 lines of the csv file to display to the user. \
-            Here is the user's query: " + user_query + " If their query does not relate, \
-            or the code is not able to save a csv, ask for clarification. You may generate some code if there has been no code generated in your conversation yet."
+    elif selected_action == "Run Code":
+        return "Use the most recent code and input it into the correct tool to be run. graph_tool is used when the code saves a png. \
+            map_tool is used when the code saves an html. csv_tool is used when the code saves a csv file. \
+                If there are no files saved in the code, you may use code executor."
     
     elif selected_action == "Simple Chat":
         return user_query
     
     else:
-        return user_query # no modifiaction
+        return user_query # no modification
+
+
+
+
+

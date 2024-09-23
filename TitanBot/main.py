@@ -14,7 +14,7 @@ from langchain_community.utilities.sql_database import SQLDatabase
 
 # imports from other files
 from utils import create_graph, create_db_from_uploaded_csv, fetch_data_and_create_db, invoke_titanbot
-from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history, create_buttons
+from ui import display_chat_messages, get_user_query, setup_streamlit_page, clear_message_history, create_buttons, blank_messages
 from prompts import AGENT_SYSTEM_MESSAGE
 from tools import create_tools
 
@@ -32,7 +32,7 @@ if 'db_path' not in st.session_state:
     st.session_state.db_path = None
 
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", "content": "How can I help you?", "image": None, "file_data": None, "filename": None}]
+    st.session_state["messages"] = blank_messages()
 
 
 
