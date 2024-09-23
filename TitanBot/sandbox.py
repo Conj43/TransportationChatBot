@@ -4,6 +4,7 @@
 
 import docker, shlex, uuid, textwrap, os, tarfile, io, time, csv
 from io import BytesIO
+from bs4 import BeautifulSoup
 
 
 class AICodeSandbox:
@@ -143,6 +144,9 @@ class AICodeSandbox:
                     try:
                         decoded_content = file_content.decode('utf-8')
                         # Additional check for CSV files
+                        if filename.lower().endswith('.html'):
+                            soup = BeautifulSoup(decoded_content, 'html.parser')
+                            return soup  # or any specific processing you want
                         if filename.lower().endswith('.csv'):
                             try:
                                 # Parse CSV content
