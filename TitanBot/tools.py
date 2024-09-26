@@ -1,15 +1,9 @@
 # main file is main.py
 
 # imports
-import sqlite3, os, io, csv, folium, ast
-from typing import List, Any, Optional, Tuple
-import pandas as pd
+import os, io, csv,ast
+from typing import List
 import streamlit as st
-from streamlit_folium import folium_static
-import osmnx as ox
-import geopandas as gpd
-from geopy.distance import geodesic
-import matplotlib as plt
 from tavily import TavilyClient
 from PIL import Image
 from io import BytesIO
@@ -19,17 +13,35 @@ from io import BytesIO
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_openai import ChatOpenAI
-from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.pydantic_v1 import BaseModel
 from langchain.tools import StructuredTool
 from langchain_core.messages import SystemMessage, HumanMessage
 
 # imports from other files
-from calculations import prep_data, arterial_speed_index, calculate_arterial
 from sandbox import AICodeSandbox
 
 
 # tavily used to help generate reports
 tavily_api_key = os.getenv('TAVILY_API_KEY')
+
+
+# function to keep file names unique
+def get_unique_filename(filename):
+    """Generate a unique filename by appending a counter if the filename already exists."""
+    base_filename, file_extension = filename.rsplit('.', 1) if '.' in filename else (filename, '')
+    counter = 1
+
+    # Modify filename until it is unique
+    while filename in st.session_state.used_filenames:
+        filename = f"{base_filename}_{counter}.{file_extension}" if file_extension else f"{base_filename}_{counter}"
+        counter += 1
+    
+    # Add the unique filename to the set
+    st.session_state.used_filenames.add(filename)
+    return filename
+
+
+
 
 # function to initialize tools the agent will use
 def create_tools(db_path):
@@ -67,16 +79,15 @@ def create_tools(db_path):
             # read the file from the sandbox
             map_content = sandbox.read_file(map_path)
 
-            
-
             # Display the HTML content in Streamlit
             st.components.v1.html(str(map_content), height=600, scrolling=True)
 
-            st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": None, "filename": filename, "html": str(map_content)})
+            new_filename = get_unique_filename(filename)
+            st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": None, "filename": new_filename, "html": str(map_content)})
             st.download_button(
-                label=f"Download {filename}",
+                label=f"Download {new_filename}",
                 data=str(map_content),
-                file_name=filename,
+                file_name=new_filename,
                 mime='text/html'
             )
         finally:
@@ -89,253 +100,7 @@ def create_tools(db_path):
     map_tool = StructuredTool.from_function(
         func=display_map,
         name="map_tool",
-        description="Use this tool to create a map. Input the filename and the code to be run.",
-    )
-
-
-
-
-
-    def congestion_map(query, batch_size=1000):
-        try:
-            conn = sqlite3.connect(db_path)
-            # Execute the query and process the data
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            result_df_edit = prep_data(df)
-            total_df = calculate_arterial(result_df_edit)
-            
-            # Calculate congestion level for each segment
-            congestion_df = total_df.groupby(['tmc', 'link', 'start_lat', 'end_lat', 'start_long', 'end_long']).agg({
-                "SI": "mean",
-                "congestion_level": "first"
-            }).reset_index()
-
-            # Ensure latitude and longitude are numeric
-            congestion_df[['start_lat', 'end_lat', 'start_long', 'end_long']] = congestion_df[['start_lat', 'end_lat', 'start_long', 'end_long']].apply(pd.to_numeric)
-
-            # Define the area of interest
-            place_name = "St. Louis, Missouri, USA"  # Change as needed
-
-            # Download road network data for the area
-            graph = ox.graph_from_place(place_name, network_type='drive')
-            edges = ox.graph_to_gdfs(graph, nodes=False)
-            nodes = ox.graph_to_gdfs(graph, edges=False)
-
-            # Convert points to GeoDataFrame
-            gdf = gpd.GeoDataFrame(
-                congestion_df,
-                geometry=gpd.points_from_xy(congestion_df.start_long, congestion_df.start_lat),
-                crs='EPSG:4326'
-            )
-
-            # Function to get the nearest node in the road network
-            def get_nearest_node(lat, long):
-                return ox.distance.nearest_nodes(graph, long, lat)
-
-            # Find nearest nodes for start and end points
-            congestion_df['start_node'] = congestion_df.apply(lambda row: get_nearest_node(row.start_lat, row.start_long), axis=1)
-            congestion_df['end_node'] = congestion_df.apply(lambda row: get_nearest_node(row.end_lat, row.end_long), axis=1)
-
-            # Calculate shortest paths between nodes
-            congestion_df['route'] = congestion_df.apply(lambda row: ox.shortest_path(graph, row.start_node, row.end_node, weight='length'), axis=1)
-            congestion_df.dropna(subset=['route'], inplace=True)
-
-            # Define color mapping for congestion levels
-            color_mapping = {
-                "Light": "#83cb22",    # Dark Green
-                "Moderate": "#fcff30", # Dark Yellow
-                "Heavy": "#f9502b",    # Dark Orange
-                "Severe": "#b62000"    # Dark Red
-            }
-
-            # Create a Folium map
-            m = folium.Map(location=[38.77468, -90.41166], zoom_start=10)
-
-            # Add road segments to the map
-            for _, row in congestion_df.iterrows():
-                route_nodes = row['route']
-                route_coords = [(nodes.loc[node].y, nodes.loc[node].x) for node in route_nodes]
-                
-                # Create a tooltip with segment and link numbers, and congestion level
-                tooltip_text = f"Segment Number: {row['tmc']}<br>Link Number: {row['link']}<br>Congestion Level: {row['congestion_level']}"
-                
-                folium.PolyLine(
-                    locations=route_coords,
-                    color=color_mapping[row.congestion_level],
-                    weight=5,
-                    opacity=0.7,
-                    tooltip=folium.Tooltip(tooltip_text, sticky=True)
-                ).add_to(m)
-
-            # Display map to the screen
-            folium_static(m)
-
-            return "Congestion Map displayed successfully"
-        
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_map_tool!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_map_tool!"
-
-    congestion_map_tool = StructuredTool.from_function(
-        func=congestion_map,
-        name="congestion_map_tool",
-        description="Use this tool to draw a congestion map. The user will ask you to make a congestion map, \
-            so you will generate the correct query and input it into this tool. The query you create should query \
-                for all data in the correct table. After the map is created use the report_tool to generate an informative \
-                    report on the data in the map."
-    )
-
-    def congestion_level(query, batch_size=1000):
-        try:
-            conn = sqlite3.connect(db_path)
-            # Execute the query and process the data
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            result_df_edit = prep_data(df)
-            total_df = calculate_arterial(result_df_edit)
-            
-            # Calculate congestion level for each segment
-            congestion_df = total_df.groupby(['tmc', 'link', 'start_lat', 'end_lat', 'start_long', 'end_long']).agg({
-                "congestion_level": "first"
-            }).reset_index()
-
-            return "Successful Query. Here is the congestion level",congestion_df
-        
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_level_tool!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using congestion_level_tool!"
-
-    congestion_level_tool = StructuredTool.from_function(
-        func=congestion_level,
-        name="congestion_level_tool",
-        description="Use this tool to calculate the congestion_level. The user will ask you for a calculate the congestion level, \
-            so you will generate the correct query and input it into this tool."
-    )
-
-
-
-
-    def roadwork_search (query0, query1):
-        try:
-            conn = sqlite3.connect(db_path)
-            df = pd.read_sql_query(query1, conn)
-            result_df_edit = prep_data(df)
-            total_df = calculate_arterial(result_df_edit)
-            conn.close()
-            # Calculate congestion level for each segment
-            congestion_df = total_df.groupby(['tmc', 'link', 'start_lat', 'end_lat', 'start_long', 'end_long']).agg({
-                "congestion_level": "first"
-            }).reset_index()
-
-
-            acc_df = pd.read_sql_query(query0, conn)
-            acc_df['dt'] = pd.to_datetime(acc_df['pub_millis'])
-            acc_df['year'] = acc_df['dt'].dt.year
-
-
-            # Function to check if an accident is within a certain radius
-            def is_within_range(row, accident_data, radius=1.0):
-                start_point = (row['start_lat'], row['start_long'])
-                end_point = (row['end_lat'], row['end_long'])
-                
-                for _, accident in accident_data.iterrows():
-                    accident_point = (accident['latitude'], accident['longitude'])
-                    if geodesic(start_point, accident_point).miles <= radius or geodesic(end_point, accident_point).miles <= radius:
-                        return True
-                return False
-
-            # Function to get nearby accident info
-            def get_nearby_info(row, accident_data, radius=1.0):
-                start_point = (row['start_lat'], row['start_long'])
-                end_point = (row['end_lat'], row['end_long'])
-                
-                nearby_info = []
-                for _, accident in accident_data.iterrows():
-                    accident_point = (accident['latitude'], accident['longitude'])
-                    if geodesic(start_point, accident_point).miles <= radius or geodesic(end_point, accident_point).miles <= radius:
-                        nearby_info.append(accident['year'])
-                return nearby_info
-
-            # Apply functions to dataframe
-            congestion_df['roadwork_nearby'] = congestion_df.apply(is_within_range, axis=1, accident_data=acc_df)
-            congestion_df['years'] = congestion_df.apply(lambda row: ', '.join(map(str, get_nearby_info(row, acc_df))) if get_nearby_info(row, acc_df) else 'None', axis=1)
-
-            congestion_df['years'] = congestion_df['years'].apply(lambda x: x.split(',')[0].strip())
-
-            return "Successful Query. Here is the congestion level",congestion_df
-        
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using roadwork_search_tool!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using roadwork_search_tool!"
-
-    roadwork_search_tool = StructuredTool.from_function(
-        func=roadwork_search,
-        name="roadwork_search_tool",
-        description="Use this tool to determine if there was roadwork in a given year. The user will ask you for a determine the roadwork, \
-            so you will generate the correct query and input it into this tool."
-    )
-
-    def fatality_yearly_comparison(query, batch_size=1000):
-        try:
-            # Execute the query and process the data
-            #query ="SELECT * FROM accidents" 
-            conn = sqlite3.connect(db_path)
-            df = pd.read_sql_query(query, conn)
-            conn.close()
-            #Preprocess the Data
-            df['ACTIVATION'] = pd.to_datetime(df['ACTIVATION'])
-            df['year'] = df['ACTIVATION'].dt.year
-            df['quarter'] = df['ACTIVATION'].dt.quarter
-
-            # Count the number of incidents per year and quarter
-            count_data = df.groupby(['year', 'quarter', 'ACC_SVRTY_']).size().unstack(fill_value=0).reset_index()
-
-            fatal_counts = count_data.pivot(index='year', columns='quarter', values='FATAL').fillna(0)
-            injury_counts = count_data.pivot(index='year', columns='quarter', values='DISABLING INJURY').fillna(0)
-
-            # Calculate the 5-year average for fatal (you can also do this for injury if needed)
-            five_year_average = fatal_counts.mean(axis=1)
-
-            #Plot the Data
-            fig, ax = plt.subplots(figsize=(10, 6))
-
-            # Plot each quarter as a separate stacked bar for fatal counts
-            quarters = ['1st Qtr', '2nd Qtr', '3rd Qtr', '4th Qtr']
-            colors = ['#4c78a8', '#f58518', '#54a24b', '#e45756']
-
-            for i, quarter in enumerate(fatal_counts.columns, start=1):
-                ax.bar(fatal_counts.index, fatal_counts[quarter], color=colors[i-1], label=f'Q{i}')
-
-            # Plot the 5-year average as a line
-            # ax.plot(fatal_counts.index, five_year_average, color='blue', marker='o', linestyle='-', linewidth=2, label='5-year average')
-
-
-            # Add labels, title, and legend
-            ax.set_xlabel('Calendar Year')
-            ax.set_ylabel('Number of Fatalities')
-            ax.set_title('Number of Fatalities')
-            ax.legend(loc='upper right')
-
-            st.pyplot(plt.gcf()) # instead of plt.show()
-            # plt.show()
-
-
-            return "Fatalities graph displayed successfully", fatal_counts
-
-        except sqlite3.Error as e:
-            return f"SQL query failed with error: {e} Please use sql_db_schema and then rewrite the query and try again using fatality_yearly_comparison_tool!"
-        except Exception as e:
-            return f"An unexpected error occurred: {e} Please use sql_db_schema and then rewrite the query and try again using fatality_yearly_comparison_tool!"
-
-    fatality_yearly_comparison_tool = StructuredTool.from_function(
-        func=fatality_yearly_comparison,
-        name="fatality_yearly_comparison_tool",
-        description="Use this tool to calculate the comparison of the quarterly fatalities. The user will ask you for to compare the previous year's fatalities , \
-            so you will generate the correct query and input it into this tool. Query for all data from the correct table."
+        description="Use this tool when the code saves a html file. Input the filename and the code to be run.",
     )
 
 
@@ -443,14 +208,8 @@ def create_tools(db_path):
     code_executor = StructuredTool.from_function(
         func=code_exec,
         name="code_executor",
-        description="Use this tool when you are asked to execute or run code generated by the Agent.\
-              Input a list of the required packages, \
-                and the python script that needs to be run into this tool. Make sure your input is a string. \
-                You will run the code and return the code and output. Display the code and the result to the user. \
-                      Ask if they would like to make any changes to it."
+        description="Use this tool to run code that does not save a file. The code should print the output. Input the code into this tool to be executed."
     )
-
-
 
     
     # function used to run code and display a graph
@@ -472,7 +231,6 @@ def create_tools(db_path):
         sandbox = AICodeSandbox(packages=packages)
 
 
-        
         try:
             # write the db to the sandbox
             sandbox.write_file(container_file_path, db_content)
@@ -486,8 +244,6 @@ def create_tools(db_path):
             plot_image = sandbox.read_file(img_path)
 
             
-
-
             img = Image.open(BytesIO(plot_image))
             st.session_state.messages.append({"role": "set", "content": "set", "image": img, "file_data": None, "filename": None, "html": None}) # create new message with image, the role and content will be set later
             st.image(img) # display image
@@ -500,20 +256,16 @@ def create_tools(db_path):
     graph_tool = StructuredTool.from_function(
         func=new_graph_func,
         name="graph_tool",
-        description="Use this tool when you are asked to run graph tool. Input code to create a graph and the file name of the graph."
+        description="Use this tool when the code saves a png image. Input code to create an image and the file name of the image."
     )
 
 
     # function to save data to csv file and allow users to download it
     def csv_func(input, filename):
         # same idea as other functions to parse packages and code
-        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
 
         # define path for db in sandbox
         container_file_path = '/your_db.db'
-
-        file_path = filename
 
         # put db content into bytes
         db_content = get_database_content(db_path)
@@ -521,8 +273,6 @@ def create_tools(db_path):
         packages = parse_packages(input)
         print("Using Parser: ",packages)
         sandbox = AICodeSandbox(packages=packages)
-
-
 
 
         try:
@@ -535,7 +285,7 @@ def create_tools(db_path):
             print(result)
 
             # read csv from sandbox
-            data = sandbox.read_file(file_path)
+            data = sandbox.read_file(filename)
 
             # prepare csv data for inputting the values into the button
             csv_data = io.StringIO()
@@ -546,13 +296,16 @@ def create_tools(db_path):
             # print(csv_data.getvalue())
             # print(data)
             # create button to download csv 
+            new_filename = get_unique_filename(filename)
+
+
             st.download_button(
-                label=f"Download {file_path}",
+                label=f"Download {new_filename}",
                 data=csv_data.getvalue(),
-                file_name=file_path,
+                file_name=new_filename,
                 mime='text/csv'
             )
-            st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": csv_data.getvalue(), "filename": filename, "html": None}) # create new message with btn, the role and content will be set later
+            st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": csv_data.getvalue(), "filename": new_filename, "html": None}) # create new message with btn, the role and content will be set later
         finally:
             # make sure to close sandbox
             sandbox.close()
@@ -564,9 +317,8 @@ def create_tools(db_path):
     csv_tool = StructuredTool.from_function(
         func=csv_func,
         name="csv_tool",
-        description="Use this tool when you are asked to make a csv file. Input code to create a csv file. Input name for csv file used in code."
+        description="Use this tool when the code saves a csv file. Input code to create a csv file. Input name for csv file used in code."
     )
-
 
 
 
@@ -583,9 +335,8 @@ def create_tools(db_path):
 
 
     # create our list of tools
-    tools = [map_tool, congestion_map_tool, congestion_level_tool, 
-             list_tables_tool, get_schema_tool, query_tool, checker_tool, fatality_yearly_comparison_tool, 
-             roadwork_search_tool, report_tool, code_executor, graph_tool, csv_tool]
+    tools = [map_tool, list_tables_tool, get_schema_tool, query_tool, 
+             checker_tool, report_tool, code_executor, graph_tool, csv_tool]
     
     # return list of tools that agent can use
     return tools
@@ -618,26 +369,6 @@ def parse_packages(code):
 
 
 
-# defines a class that classifies output from our sql agent as coordinates or not coordinates, we use structured output to easily identify our cases
-class Map(BaseModel):
-    # """Take the input coordinates and translate it into a list of coordinate pairs in the format: [(21.21323, -83.43232), (43.5435, 54.2344)...] as an example.""" # instructions for llm
-    map: bool = Field(description="False if there are no coordinates in the input. True if there are coordinates in the input.") # true if there are coordinates, false if not
-    coordinates: Optional[List[Tuple]] = Field(description="List of coordinate pairs. If there are no coordinates, coordinates will be None.")
-
-
-# class that allows us to define variables for our code execution
-class Code(BaseModel):
-    """Correctly put python code into code."""
-    code: str = Field(description="Put the python code into this field.")
-
-
-
-
-# function that creates map llm and returns it
-def create_map_llm():
-    llm=ChatOpenAI(model="gpt-4o-mini", temperature=0)
-    map_llm = llm.with_structured_output(Map)
-    return map_llm
 
 class Queries(BaseModel):
     queries: List[str]

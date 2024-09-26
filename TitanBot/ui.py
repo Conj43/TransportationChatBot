@@ -53,12 +53,14 @@ def get_user_query():
 # function to clear the message history, also clears the chat history for the bot
 def clear_message_history():
     st.session_state.db_path = None
-    st.sidebar.info("History cleared.")
+    # st.sidebar.info("History cleared.")
     if st.session_state["messages"] is not None:
         st.session_state["messages"] = blank_messages()
     if "graph" in st.session_state:
         tools = create_tools(st.session_state.db_path)
         st.session_state.graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
+    if "used_filenames" in st.session_state:
+        st.session_state.used_filenames = set()
 
 
 
@@ -74,31 +76,36 @@ def setup_streamlit_page():
 
 def create_buttons():
     col1, col2, col3, col4 = st.columns(4)  # Define columns for action buttons
-    bool = False
     placeholder = st.empty()
+    bool=False
     with placeholder.container():  # Put each button in its own column in a container
         with col1:  # Used to generate code
             if st.button('Natural Language to Code'):
                 st.success('Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Code Gen"
 
+
         with col2:  # Used to generate and execute SQL queries
             if st.button('Natural Language to SQL Query'):
                 st.success('Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "SQL Query"
+
 
         with col3:
             if st.button('Simple Chat with TitanBot'):  # Used to just chat with TitanBot
                 st.success('Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Simple Chat"
 
+
         with col4:
-            if st.button('Execute Code'):  # Used to execute code that generates a plot
+            if st.button('Execute Code'):  # used to run the code
                 st.success('Code will now be executed!')
                 st.session_state["selected_action"] = "Run Code"
                 bool=True
 
-
     if bool:
         invoke_titanbot("Execute my code please!")
+
+        
+
 

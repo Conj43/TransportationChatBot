@@ -129,13 +129,14 @@ def invoke_titanbot(user_query):
             last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
             last_message["content"] = response
         elif last_message.get("html"):
-            last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in csv_tool
+            last_message["role"] = "assistant" # we need to redefine role and content if we have a button because we create the message in tools.py in map_tool
             last_message["content"] = response
         else:
             st.session_state.messages.append({"role": "assistant", "content": response, "image": None, "file_data": None, "filename": None, "html": None}) # if there is no png, or image just keep image as none
         st.write(response) # write response to screen
 
     st.session_state["selected_action"] = None # reset selected action
+
 
 
 
@@ -215,16 +216,18 @@ def get_selected_action(user_query, selected_action):
     if selected_action == "Code Gen":
         return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math \
             should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate. \
-                You dont need to show schema unless asked to."
+                Don't output the schema. Make sure you save figures, plots or csv files in the code. Use plotly to create graphs and folium to create maps and save them as\
+                     html files. DO NOT save multiple files in one code."
     
     elif selected_action == "SQL Query":
         return "First look at the schema for all tables in this database. Then generate a sql query to answer this input from the user: " + user_query  + " Then run the query \
             you generated and tell me the results."
     
     elif selected_action == "Run Code":
-        return "Use the most recent code and input it into the correct tool to be run. graph_tool is used when the code saves a png. \
-            map_tool is used when the code saves an html. csv_tool is used when the code saves a csv file. \
-                If there are no files saved in the code, you may use code executor."
+        return "Use the most recent code and input it into the correct tool to be run. graph_tool is used when the code saves a png image. \
+            map_tool is used when the code saves a html file. csv_tool is used when the code saves a csv file. \
+                If there are no files saved in the code, you may use code executor. Never run code using a filename that has already been run. \
+                    Never save multiple files in one code."
     
     elif selected_action == "Simple Chat":
         return user_query

@@ -85,6 +85,7 @@ if st.sidebar.button("Fetch Data"):
         temp_file.close()
         db_path = fetch_data_and_create_db(data_url, temp_file_path)
         if db_path:
+            print(db_path)
             st.session_state.db_path = db_path
             st.sidebar.success("Data fetched and database created successfully.")
     else:
@@ -98,9 +99,9 @@ st.sidebar.markdown("Upload one or more CSV files for analysis.")
 uploaded_csv_files = st.sidebar.file_uploader("Choose CSV files", type=['csv'], accept_multiple_files=True, key="csv_uploader")
 
 # Process CSV files
-if uploaded_csv_files:
-    csv_files = [uploaded_csv_file for uploaded_csv_file in uploaded_csv_files if uploaded_csv_file.type == 'text/csv']
+if len(uploaded_csv_files) > 0:
     if st.session_state.db_path is None:
+        csv_files = [uploaded_csv_file for uploaded_csv_file in uploaded_csv_files if uploaded_csv_file.type == 'text/csv']
         if csv_files:
             st.session_state.csv_files = csv_files
             db_path = create_db_from_uploaded_csv(csv_files)
@@ -113,6 +114,10 @@ if uploaded_csv_files:
             st.sidebar.error("Error: No valid CSV files uploaded.")
     else:
         st.sidebar.success("Database created successfully.")
+
+
+if uploaded_file is None and len(uploaded_csv_files) == 0 and data_url is None:
+    clear_message_history()
 
 
 
@@ -136,6 +141,11 @@ if st.session_state.db_path is not None:
     if "selected_action" not in st.session_state:
         st.session_state["selected_action"] = None
 
+    if "used_filenames" not in st.session_state:
+        st.session_state.used_filenames = set()
+
+
+
     # Display past messages
     display_chat_messages(st.session_state["messages"])
 
@@ -146,7 +156,10 @@ if st.session_state.db_path is not None:
     if user_query:
         invoke_titanbot(user_query=user_query)
 
+
     # create buttons to select modes
     create_buttons()
+
+    
 
     
