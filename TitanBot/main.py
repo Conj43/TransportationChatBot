@@ -42,12 +42,7 @@ if st.sidebar.button("Clear History"):
 
 
 # sidebar information
-st.sidebar.subheader("Welcome to TitanBot!")
-st.sidebar.markdown("First, upload your database with traffic or accident information, then chat with your data! \
-                    Use the different buttons to specify what task you'd like TitanBot to perform. Click the button first, \
-                    then it will show it has been activated. Then you may submit your query or question, and TitanBot will use \
-                    it's tools to best answer your request.")
-st.sidebar.markdown("---")
+
 st.sidebar.subheader("Database Upload")
 st.sidebar.markdown("Upload a SQLite .db file for analysis.")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
@@ -71,10 +66,11 @@ if uploaded_file is not None:
         st.sidebar.success("Database uploaded successfully.") 
 
 
-
+st.sidebar.markdown("---")
 
 # API UPLOAD
-st.sidebar.markdown("Or, provide a URL to fetch data:")
+st.sidebar.subheader("Cloud Database Upload")
+st.sidebar.markdown("Provide a URL to fetch data:")
 data_url = st.sidebar.text_input("Enter URL")
 
 # Handle URL input
@@ -92,7 +88,7 @@ if st.sidebar.button("Fetch Data"):
         st.sidebar.error("Error: Please provide a valid URL.")
 
 
-
+st.sidebar.markdown("---")
 # CSV UPLOAD
 st.sidebar.subheader("CSV File Upload")
 st.sidebar.markdown("Upload one or more CSV files for analysis.")

@@ -2,7 +2,7 @@
 # has bene modified to fit our needs
 
 
-import docker, shlex, uuid, textwrap, os, tarfile, io, time, csv
+import docker, shlex, uuid, textwrap, os, tarfile, io, time, csv, re
 from io import BytesIO
 from bs4 import BeautifulSoup
 
@@ -29,7 +29,7 @@ class AICodeSandbox:
             custom_image (str, optional): Name of a custom Docker image to use. Defaults to None.
             packages (list, optional): List of Python packages to install in the sandbox. Defaults to None.
             network_mode (str, optional): Network mode to use for the sandbox. Defaults to "none".
-            mem_limit (str, optional): Memory limit for the sandbox. Defaults to "100m".
+            mem_limit (str, optional): Memory limit for the sandbox. Defaults to "400m".
             cpu_period (int, optional): CPU period for the sandbox. Defaults to 100000.
             cpu_quota (int, optional): CPU quota for the sandbox. Defaults to 50000.
         """
@@ -71,6 +71,10 @@ class AICodeSandbox:
             Exception: If writing to the file fails.
         """
         
+        if not self.is_allowed_file(filename):
+            raise Exception(f"File name '{filename}' is not allowed.")
+        
+
         if isinstance(content, str): # if input is string, convert to bytes
             content = content.encode('utf-8')
 
@@ -116,6 +120,10 @@ class AICodeSandbox:
         Raises:
             Exception: If reading the file fails.
         """
+
+        if not self.is_allowed_file(filename):
+            raise Exception(f"File name '{filename}' is not allowed.")
+
         try:
             # Read file content as a tar archive
             bits, _ = self.container.get_archive(filename)
@@ -143,10 +151,11 @@ class AICodeSandbox:
                     # Attempt to decode as UTF-8 text
                     try:
                         decoded_content = file_content.decode('utf-8')
-                        # Additional check for CSV files
+                        # check for html files
                         if filename.lower().endswith('.html'):
                             soup = BeautifulSoup(decoded_content, 'html.parser')
-                            return soup  # or any specific processing you want
+                            return soup  
+                        # check for csv file
                         if filename.lower().endswith('.csv'):
                             try:
                                 # Parse CSV content
@@ -183,6 +192,13 @@ class AICodeSandbox:
         Returns:
             str: Output of the executed code or error message.
         """
+
+
+
+        if self.contains_harmful_code(code):
+            raise Exception("File content contains harmful code.")
+
+
         if env_vars is None:
             env_vars = {}
         
@@ -253,4 +269,51 @@ class AICodeSandbox:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit point."""
         self.close()
+
+    
+    def is_allowed_file(self, filename):
+        # define extensions to be allowed
+        allowed_extensions = ['.txt', '.csv', '.html', '.db', '.png']
+
+        # file name we use for all dbs that user inputs
+        allowed_files = ['/your_db.db']
+
+        # allow '/your_db.db'
+        if filename in allowed_files:
+            return True
+
+
+        disallowed_pattern = r'[^a-zA-Z0-9_.-]'  # allow letters, numbers, underscores, periods, and dashes
+
+        # check file extension extension
+        if not any(filename.endswith(ext) for ext in allowed_extensions):
+            return False
+        
+        # check file name
+        if re.search(disallowed_pattern, filename):
+            return False
+
+        return True # return true if there were no illegal extensions or names
+    
+
+    def contains_harmful_code(self, content):
+        # check for harmful patterms such as:
+        # subprocess, eval, exec, os.system, os.remove, open, shutil, os and sys are all not allowed to appear in code to be executed
+        # also cannot use __import__, globals or locals
+        harmful_patterns = [
+            r'\b(import os|import sys|subprocess|eval|exec|os.system|os.remove|open\([^)]*|shutil)\b',
+            r'\b(__import__|globals|locals)\b'
+        ]
+
+        # check code for harmful patterns
+        for pattern in harmful_patterns:
+            if re.search(pattern, content):
+                return True
+
+        return False
+    
+
+
+
+
 

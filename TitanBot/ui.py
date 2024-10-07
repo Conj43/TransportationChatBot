@@ -81,19 +81,19 @@ def create_buttons():
     with placeholder.container():  # Put each button in its own column in a container
         with col1:  # Used to generate code
             if st.button('Natural Language to Code'):
-                st.success('Activated! You may now enter your chat!')
+                st.success('Code Generation Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Code Gen"
 
 
         with col2:  # Used to generate and execute SQL queries
             if st.button('Natural Language to SQL Query'):
-                st.success('Activated! You may now enter your chat!')
+                st.success('SQL Query Generation Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "SQL Query"
 
 
         with col3:
             if st.button('Simple Chat with TitanBot'):  # Used to just chat with TitanBot
-                st.success('Activated! You may now enter your chat!')
+                st.success('Simple Chat Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Simple Chat"
 
 

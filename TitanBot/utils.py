@@ -215,7 +215,8 @@ def fetch_data_and_create_db(url, db_file_path):
 def get_selected_action(user_query, selected_action):
     if selected_action == "Code Gen":
         return "First look at the schema for all tables in this database. Then write a python code to accomplish the following: " + user_query + " This math \
-            should be calculated in the python code, do not try to make calculations in your sql query. Then show me the code you generate. \
+            should be calculated in the python code, do not try to make calculations in your sql query.\
+                Only save to a csv file if the output is too long to print. Then show me the code you generate. \
                 Don't output the schema. Make sure you save figures, plots or csv files in the code. Use plotly to create graphs and folium to create maps and save them as\
                      html files. DO NOT save multiple files in one code."
     
