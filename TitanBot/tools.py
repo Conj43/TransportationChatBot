@@ -22,21 +22,20 @@ from sandbox import AICodeSandbox
 
 
 # tavily used to help generate reports
-tavily_api_key = os.getenv('TAVILY_API_KEY')
+# tavily_api_key = os.getenv('TAVILY_API_KEY')
 
 
 # function to keep file names unique
 def get_unique_filename(filename):
-    """Generate a unique filename by appending a counter if the filename already exists."""
     base_filename, file_extension = filename.rsplit('.', 1) if '.' in filename else (filename, '')
     counter = 1
 
-    # Modify filename until it is unique
+    # modify filename until it is unique
     while filename in st.session_state.used_filenames:
         filename = f"{base_filename}_{counter}.{file_extension}" if file_extension else f"{base_filename}_{counter}"
         counter += 1
     
-    # Add the unique filename to the set
+    # add the unique filename to the set
     st.session_state.used_filenames.add(filename)
     return filename
 
@@ -47,7 +46,7 @@ def get_unique_filename(filename):
 def create_tools(db_path):
 
 
-    # function to display points to a map using streamlit's st.map
+    # function to display points to a map
     def display_map(input, filename):
         # same idea as code executor, just parses the packages and code
 
@@ -82,8 +81,12 @@ def create_tools(db_path):
             # Display the HTML content in Streamlit
             st.components.v1.html(str(map_content), height=600, scrolling=True)
 
+            # make unique filename
             new_filename = get_unique_filename(filename)
+
+            # create message with the map and file
             st.session_state.messages.append({"role": "set", "content": "set", "image": None, "file_data": None, "filename": new_filename, "html": str(map_content)})
+            # create button to download map
             st.download_button(
                 label=f"Download {new_filename}",
                 data=str(map_content),
@@ -103,65 +106,65 @@ def create_tools(db_path):
         description="Use this tool when the code saves a html file. Input the filename and the code to be run.",
     )
 
-
+# REPORT TOOL is commented out
 
     # function to generate report
-    def report_gen(info):
-        llm = ChatOpenAI(model="gpt-4o-mini")
-        # prompt to help llm generate queries for us
-        QUERY_PROMPT = """You are a MoDOT employee that is focused on data in Missouri.
-                    Your job is to generate an informative and reliable report. 
-                    You will be given the user query, and you must generate a list of search queries that will gather 
-                    any relevant information. Only generate 3 queries max."""
+    # def report_gen(info):
+    #     llm = ChatOpenAI(model="gpt-4o-mini")
+    #     # prompt to help llm generate queries for us
+    #     QUERY_PROMPT = """You are a MoDOT employee that is focused on data in Missouri.
+    #                 Your job is to generate an informative and reliable report. 
+    #                 You will be given the user query, and you must generate a list of search queries that will gather 
+    #                 any relevant information. Only generate 3 queries max."""
 
-        # use llm to generate queries t get a more focused search
-        queries = llm.with_structured_output(Queries).invoke([
-            SystemMessage(content=QUERY_PROMPT),
-            HumanMessage(info)
-        ])
+    #     # use llm to generate queries t get a more focused search
+    #     queries = llm.with_structured_output(Queries).invoke([
+    #         SystemMessage(content=QUERY_PROMPT),
+    #         HumanMessage(info)
+    #     ])
 
-        # use tavily to find outside info on internet
-        tavily = TavilyClient()
-        all_responses = []
+    #     # use tavily to find outside info on internet
+    #     tavily = TavilyClient()
+    #     all_responses = []
 
-        # invoke tavily using each of the queries we generated (max of 3)
-        for query in queries.queries:
-            # print("query: ", query)
-            response = tavily.search(query=query, max_results=1)
+    #     # invoke tavily using each of the queries we generated (max of 3)
+    #     for query in queries.queries:
+    #         # print("query: ", query)
+    #         response = tavily.search(query=query, max_results=1)
             
-            # apped results to a list that keeps track of all results
-            for r in response['results']:
-                all_responses.append(r)
-                # all_responses.append(r['content'])
-                # print(r['content'])
-                # print(r)
+    #         # apped results to a list that keeps track of all results
+    #         for r in response['results']:
+    #             all_responses.append(r)
+    #             # all_responses.append(r['content'])
+    #             # print(r['content'])
+    #             # print(r)
 
 
-        # use llm to then summarize our list of all results
-        temp = """You are a MoDOT employee that is focused on data in Missouri.
-            You just searched for data and here are the search results:\n
-            {compiled_info}\n
-            Please compile this information into a formal concise summary.
-            Here is the user's input for context:\n
-            {info}\n
-            Use the URLs given to cite your sources."""
+    #     # use llm to then summarize our list of all results
+    #     temp = """You are a MoDOT employee that is focused on data in Missouri.
+    #         You just searched for data and here are the search results:\n
+    #         {compiled_info}\n
+    #         Please compile this information into a formal concise summary.
+    #         Here is the user's input for context:\n
+    #         {info}\n
+    #         Use the URLs given to cite your sources."""
 
-        prompt = temp.format(compiled_info=all_responses, info=info)
+    #     prompt = temp.format(compiled_info=all_responses, info=info)
 
-        response = llm.invoke(prompt)
+    #     response = llm.invoke(prompt)
         
-        # return the summarized info as a report which the agent will use to make a report about the given info
-        return response.content
+    #     # return the summarized info as a report which the agent will use to make a report about the given info
+    #     return response.content
 
 
-    # tool that generares the report
-    report_tool = StructuredTool.from_function(
-        func=report_gen,
-        name="report_tool",
-        description="Use this tool to generate a report. Input the user query into this tool. \
-            This tool will retrieve multiple responses and summarize them for you. \
-                Do not make any changes to the report, display them directly to the user."
-    )
+    # # tool that generares the report
+    # report_tool = StructuredTool.from_function(
+    #     func=report_gen,
+    #     name="report_tool",
+    #     description="Use this tool to generate a report. Input the user query into this tool. \
+    #         This tool will retrieve multiple responses and summarize them for you. \
+    #             Do not make any changes to the report, display them directly to the user."
+    # )
 
     # function to returns database as bytes to be copied into sandbox
     def get_database_content(file_path):
@@ -293,8 +296,7 @@ def create_tools(db_path):
             csv_writer.writerows(data)
             csv_data.seek(0) 
 
-            # print(csv_data.getvalue())
-            # print(data)
+ 
             # create button to download csv 
             new_filename = get_unique_filename(filename)
 
@@ -336,18 +338,18 @@ def create_tools(db_path):
 
     # create our list of tools
     tools = [map_tool, list_tables_tool, get_schema_tool, query_tool, 
-             checker_tool, report_tool, code_executor, graph_tool, csv_tool]
+             checker_tool, code_executor, graph_tool, csv_tool]
     
     # return list of tools that agent can use
     return tools
 
+
+# use AST to parse packages
 def parse_packages(code):
-    """Parse the code to extract packages and exclude specific ones."""
-    excluded_packages = {"sqlite3", "json", "os", "math", "datetime", "random", "sys"}
+    excluded_packages = {"sqlite3", "json", "os", "math", "datetime", "random", "sys"} # these are installed with python, or they are ones we dont want to use
     package_set = set()
 
-    def get_top_level_package(package_name):
-        """Get the top-level package name."""
+    def get_top_level_package(package_name): # like for matplotlib.pyplot we just need to download matplotlib
         return package_name.split('.')[0]
 
     try:
@@ -357,12 +359,12 @@ def parse_packages(code):
                 for alias in node.names:
                     package_set.add(get_top_level_package(alias.name))
             elif isinstance(node, ast.ImportFrom):
-                if node.module:  # Ensure there is a module
+                if node.module:  # ensure there is a module
                     package_set.add(get_top_level_package(node.module))
     except SyntaxError as e:
         print(f"Syntax error in code: {e}")
 
-    # Exclude the specified packages
+    # exclude the specified packages
     packages = [pkg for pkg in package_set if pkg not in excluded_packages]
     
     return packages
@@ -370,8 +372,8 @@ def parse_packages(code):
 
 
 
-class Queries(BaseModel):
-    queries: List[str]
+# class Queries(BaseModel):
+#     queries: List[str]
 
 
 

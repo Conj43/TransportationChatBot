@@ -23,7 +23,7 @@ def display_chat_messages(messages):
         if msg.get("image") is not None:
             st.image(msg["image"], caption='Generated Image', use_column_width=True)
 
-        if msg.get("file_data") is not None:
+        if msg.get("file_data") is not None: # create button to download file
             st.download_button(
                 label=f"Download {msg['filename']}",
                 data=msg["file_data"],
@@ -32,7 +32,7 @@ def display_chat_messages(messages):
             )
         if msg.get("html") is not None:
 
-            st.components.v1.html(msg["html"], height=600, scrolling=True)
+            st.components.v1.html(msg["html"], height=600, scrolling=True) # display map
             st.download_button(
                 label=f"Download {msg['filename']}",
                 data=msg['html'],
@@ -75,24 +75,24 @@ def setup_streamlit_page():
 
 
 def create_buttons():
-    col1, col2, col3, col4 = st.columns(4)  # Define columns for action buttons
+    col1, col2, col3, col4 = st.columns(4)  # define columns for action buttons
     placeholder = st.empty()
     bool=False
-    with placeholder.container():  # Put each button in its own column in a container
-        with col1:  # Used to generate code
+    with placeholder.container():  # put each button in its own column in a container
+        with col1:  # used to generate code
             if st.button('Natural Language to Code'):
                 st.success('Code Generation Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Code Gen"
 
 
-        with col2:  # Used to generate and execute SQL queries
+        with col2:  # used to generate and execute SQL queries
             if st.button('Natural Language to SQL Query'):
                 st.success('SQL Query Generation Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "SQL Query"
 
 
         with col3:
-            if st.button('Simple Chat with TitanBot'):  # Used to just chat with TitanBot
+            if st.button('Simple Chat with TitanBot'):  # used to just chat with TitanBot
                 st.success('Simple Chat Activated! You may now enter your chat!')
                 st.session_state["selected_action"] = "Simple Chat"
 
@@ -104,7 +104,7 @@ def create_buttons():
                 bool=True
 
     if bool:
-        invoke_titanbot("Execute my code please!")
+        invoke_titanbot("Execute my code please!") # this is just a message the user sees, the real message is different
 
         
 

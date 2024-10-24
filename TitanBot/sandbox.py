@@ -59,6 +59,7 @@ class AICodeSandbox:
             cpu_quota=cpu_quota
         )
 
+    # use this to copy temp db into sandbox
     def write_file(self, filename, content):
         """
         Write content to a file in the sandbox, creating directories if they don't exist.
@@ -85,7 +86,7 @@ class AICodeSandbox:
             if mkdir_result.exit_code != 0:
                 raise Exception(f"Failed to create directory: {mkdir_result.output.decode('utf-8')}")
 
-        # Create a tar archive containing the file
+        # create a tar archive containing the file
         tar_stream = io.BytesIO()
         with tarfile.open(fileobj=tar_stream, mode='w') as tar:
             tarinfo = tarfile.TarInfo(name=filename)
@@ -95,18 +96,18 @@ class AICodeSandbox:
         tar_stream.seek(0)
 
         try:
-            # Upload the tar archive to the container
+            # upload the tar archive to the container
             self.container.put_archive(os.path.dirname(filename), tar_stream)
         except Exception as e:
             raise Exception(f"Failed to write file: {str(e)}")
 
-        # Verify that the file was created
+        # verify that the file was created
         check_command = f'test -f {shlex.quote(filename)}'
         check_result = self.container.exec_run(["sh", "-c", check_command])
         if check_result.exit_code != 0:
             raise Exception(f"Failed to write file: {filename}")
 
-    
+    # use this to copy files from sandbox to UI
     def read_file(self, filename):
         """
         Read content from a file in the sandbox.
@@ -125,25 +126,23 @@ class AICodeSandbox:
             raise Exception(f"File name '{filename}' is not allowed.")
 
         try:
-            # Read file content as a tar archive
+            # read file content as a tar archive
             bits, _ = self.container.get_archive(filename)
             
-            # Extract file content from tar archive
+            # extract file content from tar archive
             tar_stream = io.BytesIO(b''.join(bits))
             with tarfile.open(fileobj=tar_stream, mode='r') as tar:
-                # List all members to find exact name
+                # list all members to find exact name
                 members = tar.getmembers()
                 filenames_in_tar = [member.name for member in members]
-                # Debugging: Print filenames in the tar archive
-                # for member in tar.getmembers():
-                #     print(member.name)
+
 
                 
-                # Check if the file exists in the tar archive
+                # check if the file exists in the tar archive
                 if filename not in filenames_in_tar:
                     raise Exception(f"File '{filename}' not found in the tar archive.")
                 
-                # Extract the specific file
+                # extract the specific file
                 file = tar.extractfile(filename)
                 if file is not None:
                     file_content = file.read()
@@ -158,7 +157,7 @@ class AICodeSandbox:
                         # check for csv file
                         if filename.lower().endswith('.csv'):
                             try:
-                                # Parse CSV content
+                                # parse CSV content
                                 csv_reader = csv.reader(io.StringIO(decoded_content))
                                 return list(csv_reader)
                             except Exception as e:
@@ -167,7 +166,7 @@ class AICodeSandbox:
                         return decoded_content
 
                     except UnicodeDecodeError:
-                        # Return as binary data if decoding fails
+                        # return as binary data if decoding fails
                         return file_content
                 else:
                     raise Exception(f"Failed to extract file from archive: {filename}")
@@ -180,7 +179,7 @@ class AICodeSandbox:
 
 
 
-
+    # runs code passed as a string
     def run_code(self, code, env_vars=None):
         """
         Execute Python code in the sandbox.
@@ -218,20 +217,21 @@ class AICodeSandbox:
         
         stdout, stderr = exec_result.output
         if stdout is not None:
-            return stdout.decode('utf-8')
+            return stdout.decode('utf-8') # check for standard output 
         elif stderr is not None:
-            return f"Error: {stderr.decode('utf-8')}"
+            return f"Error: {stderr.decode('utf-8')}" # chek for errors
         else:
-            return "No output"
+            return "No output" # return no output if no standard output or error
 
+    # cleans up dandbox
     def close(self):
         """Remove all resources created by this sandbox."""
         if self.container:
             try:
                 print("Stopping container...")
-                self.container.stop(timeout=10)  # Stop container with a timeout
+                self.container.stop(timeout=10)  # stop container with a timeout
                 print("Removing container...")
-                self.container.remove(force=True)  # Force remove container
+                self.container.remove(force=True)  # force remove container
                 print("Container stopped and removed successfully.")
             except docker.errors.APIError as e:
                 print(f"API error while stopping/removing container: {str(e)}")

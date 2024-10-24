@@ -36,13 +36,12 @@ if "messages" not in st.session_state:
 
 
 
-# Sidebar content
+# sidebar content
 if st.sidebar.button("Clear History"):
     clear_message_history()
 
 
-# sidebar information
-
+# sqlite db upload
 st.sidebar.subheader("Database Upload")
 st.sidebar.markdown("Upload a SQLite .db file for analysis.")
 uploaded_file = st.sidebar.file_uploader("Choose a database file", key="bottom_uploader")
@@ -117,7 +116,7 @@ if uploaded_file is None and len(uploaded_csv_files) == 0 and data_url is None:
 
 
 
-# Initialize db connection to your .db file
+# initialize db connection to .db file
 if st.session_state.db_path is not None:
     db_url = URL.create( 
         drivername="sqlite",
@@ -145,7 +144,7 @@ if st.session_state.db_path is not None:
     # Display past messages
     display_chat_messages(st.session_state["messages"])
 
-    # Get the user's input
+    # get the user's input
     user_query = get_user_query()
 
     # when the users enters a chat, invoke graph
