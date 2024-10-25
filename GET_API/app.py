@@ -2,11 +2,12 @@
 
 from flask import Flask, request, jsonify
 from tools import create_tools
+from flask_cors import CORS
 from prompts import AGENT_SYSTEM_MESSAGE
 from utils import create_graph, call_graph
 
 app = Flask(__name__)
-
+CORS(app)
 tools = create_tools()
 graph = create_graph(AGENT_SYSTEM_MESSAGE, tools)
 config = {"configurable": {"thread_id": "1"}}

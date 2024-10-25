@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Flask API</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            max-width: 400px;
+        }
+        #response {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #007BFF;
+            border-radius: 5px;
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chat with API</h1>
+    <input type="text" id="userInput" placeholder="Type your message here" style="width: 100%; padding: 8px;">
+    <button onclick="sendRequest()" style="margin-top: 10px; padding: 10px; width: 100%;">Send</button>
+    <div id="response"></div> <!-- Container for the response -->
+
+    <script>
+        function sendRequest() {
+            const userInput = document.getElementById('userInput').value;
+            const url = `http://localhost:5000/api?user_input=${encodeURIComponent(userInput)}`;
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Display the response in the div with id "response"
+                    document.getElementById('response').innerHTML = `
+                        <strong>User Input:</strong> ${data.user_input}<br>
+                        <strong>Response:</strong> ${data.response}
+                    `;
+                    console.log("Server Response:", data); // Log the full response for debugging
+                })
+                .catch(error => {
+                    // Display error message
+                    document.getElementById('response').innerHTML = `
+                        <strong>Error:</strong> ${error.message}
+                    `;
+                    console.error("Error:", error);
+                });
+        }
+    </script>
+</body>
+</html>
