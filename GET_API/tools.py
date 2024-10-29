@@ -1,32 +1,41 @@
 # imports
-import os, io, csv,ast
-from dotenv import load_dotenv
-from typing import List
-from tavily import TavilyClient
-from pydantic import BaseModel
+
 
 
 # langchain imports
-from langchain_openai import ChatOpenAI
-from langchain.tools import StructuredTool
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain.tools.retriever import create_retriever_tool
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
 
 
 
 def create_tools():
 
-    def add(num1, num2):
-        return num1+num2
+    file_path = "Postdoc-Handbook.pdf"
+    loader = PyPDFLoader(file_path)
+
+    docs = loader.load()
 
 
-    # tool that generares the report
-    add_tool = StructuredTool.from_function(
-        func=add,
-        name="add_tool",
-        description="Use this tool to add 2 numbers together."
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(docs)
+    vectorstore = InMemoryVectorStore.from_documents(
+        documents=splits, embedding=OpenAIEmbeddings()
     )
+    retriever = vectorstore.as_retriever()
 
-    tools = [add_tool]
+
+
+    tool = create_retriever_tool(
+        retriever,
+        "retriever_tool",
+        "Searches and returns excerpts from the Missouri Postdoc Handbook.",
+    )
+    tools = [tool]
 
     return tools
 
