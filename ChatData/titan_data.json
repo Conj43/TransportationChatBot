@@ -1,0 +1,47 @@
+{
+    "titanbot": {
+      "about": {
+        "description": "TitanBot is an advanced analytics and data visualization tool that helps users interpret transportation data quickly and efficiently.",
+        "purpose": "Designed to provide real-time data insights and support decision-making in transportation data analysis."
+      },
+      "features": [
+        {
+          "name": "Data Import",
+          "description": "Allows users to import data in various formats, including CSV and JSON, for seamless integration."
+        },
+        {
+          "name": "Data Visualization",
+          "description": "Offers customizable visualizations such as graphs and heatmaps to highlight key trends in data."
+        },
+        {
+          "name": "AI-Powered Insights",
+          "description": "Generates insights from data using machine learning models, making complex analysis accessible."
+        }
+      ],
+      "faq": [
+        {
+          "question": "What data formats does TitanBot support?",
+          "answer": "TitanBot supports CSV, JSON, and other commonly used data formats for easy import."
+        },
+        {
+          "question": "Can TitanBot be used on mobile devices?",
+          "answer": "Yes, TitanBot is mobile-friendly and accessible from any device with an internet connection."
+        },
+        {
+          "question": "How can I get started with TitanBot?",
+          "answer": "Sign up on the website, upload your data, and explore available tools for analysis and visualization."
+        }
+      ],
+      "user_stories": [
+        {
+          "title": "City Transportation Authority",
+          "summary": "The City Transportation Authority used TitanBot to identify peak traffic times and optimize bus schedules."
+        },
+        {
+          "title": "University Research Project",
+          "summary": "A research team used TitanBot to study the correlation between weather and accident rates, improving predictive analysis."
+        }
+      ]
+    }
+  }
+  
