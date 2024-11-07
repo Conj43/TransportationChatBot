@@ -3,26 +3,39 @@
 
 
 # langchain imports
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain.tools.retriever import create_retriever_tool
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from langchain.tools import StructuredTool
 
 
 
 
 def create_tools():
 
-    def add(num1, num2):
-        return num1+num2
+    file_path = "RIDSI-Manual.pdf"
+    loader = PyPDFLoader(file_path)
+
+    docs = loader.load()
 
 
-    # tool that generares the report
-    add_tool = StructuredTool.from_function(
-        func=add,
-        name="add_tool",
-        description="Use this tool to add 2 numbers together."
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splits = text_splitter.split_documents(docs)
+    vectorstore = InMemoryVectorStore.from_documents(
+        documents=splits, embedding=OpenAIEmbeddings()
     )
+    retriever = vectorstore.as_retriever()
 
-    tools = [add_tool]
+
+
+    tool = create_retriever_tool(
+        retriever,
+        "RIDSI-Manual",
+        "Searches and returns excerpts from the RIDSI Manual.",
+    )
+    tools = [tool]
 
     return tools
 

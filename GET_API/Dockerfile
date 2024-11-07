@@ -1,7 +1,7 @@
-# docker build -t chatbot-api .
-# docker run -p 5000:5000 chatbot-api
+# docker build -t chatbot .
+# docker run -p 5000:5000 chatbot
 
-
+#now on 5002
 # use the official python slim image as the base image
 FROM python:3.9-slim
 
@@ -22,7 +22,7 @@ EXPOSE 5000
 
 # set the environment variable for flask
 ENV FLASK_APP=app.py
-ENV FLASK_RUN_HOST=0.0.0.0
+
 
 # command to run the flask app
-CMD ["flask", "run"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
