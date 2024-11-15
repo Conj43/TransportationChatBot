@@ -1,0 +1,10 @@
+flask
+flask-cors
+langchain
+langchain-openai
+langchain-community
+langgraph
+python-dotenv
+pypdf
+gunicorn
+heavyai

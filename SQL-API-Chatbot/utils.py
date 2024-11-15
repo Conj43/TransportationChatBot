@@ -1,24 +1,7 @@
 # imports 
 import os
 from dotenv import load_dotenv
-
-
-# langchian imports
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
-
-
-# langgraph imports
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
-
-from prompts import PROMPT
-
-
-
 from typing import Annotated
-
-
 from typing_extensions import TypedDict
 
 # langchian imports
@@ -32,6 +15,8 @@ from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 
+# imports from other files
+from prompts import PROMPT
 
 # load env variables
 load_dotenv()
@@ -41,68 +26,54 @@ openai_api_key = os.getenv('OPENAI_API_KEY')
 
 
 def call_agent(user_input, config, graph):
-    prompt_template = PromptTemplate(input_variables=["question"], template=PROMPT)
-    formatted_query = prompt_template.format(question=user_input)
-    response = graph.invoke({"messages": [("user", formatted_query)]}, config=config)
+    response = graph.invoke({"messages": [("user", user_input)]}, config=config)
     return response["messages"][-1].content
 
 
 
-def create_agent(tools):
-
-    memory = MemorySaver()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-
-    agent_executor = create_react_agent(llm, tools, checkpointer=memory)
-
-    return agent_executor
-
-
-
-# function to create graph, pass in system message and tools for graph
 def create_graph(system_message, tools):
+    memory = MemorySaver()  # Initialize memory (State Memory)
 
-    memory = MemorySaver() # initalize memory (State Memory)
-
-    # define class for the state
+    # Define class for the state
     class State(TypedDict):
         messages: Annotated[list, add_messages]
-    
+
     graph_builder = StateGraph(State)
 
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0) # define llm
-    tools = tools # set tools equal to tools
-    llm_with_tools = llm.bind_tools(tools) # bind tools to llm
-    
-    system_message = system_message
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)  # Define LLM
+    llm_with_tools = llm.bind_tools(tools)  # Bind tools to LLM
+
+
 
     def chatbot(state: State):
         messages = [system_message] + state["messages"]
+        # print(f"Messages sent to LLM: {messages}\n\n")  
         response = llm_with_tools.invoke(messages)
+        # print(f"Response from LLM: {response}\n\n")  
         return {"messages": [response]}
 
-    # add chatbot node
+    # Add chatbot node
     graph_builder.add_node("chatbot", chatbot)
 
-    # create tools node
+    # Create tools node
     tool_node = ToolNode(tools=tools)
 
-    # add tools node
+    # Add tools node
     graph_builder.add_node("tools", tool_node)
 
-    # add conditional edges
-    graph_builder.add_conditional_edges("chatbot",tools_condition,)
+    # Add conditional edges
+    graph_builder.add_conditional_edges("chatbot", tools_condition)
 
-    # add edge from tools to chatbot
+    # Add edge from tools to chatbot
     graph_builder.add_edge("tools", "chatbot")
 
-    # make sure graph always starts at chatbot
+    # Make sure graph always starts at chatbot
     graph_builder.set_entry_point("chatbot")
 
-    # compile graph
+    # Compile graph
     graph = graph_builder.compile(checkpointer=memory)
 
-    return graph # return graph
+    return graph  # Return graph
+
 
 

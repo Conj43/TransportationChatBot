@@ -1,49 +1,35 @@
-# http://127.0.0.1:5000/api?user_input=Hello
-
+# imports
+import logging
 from flask import Flask, request, jsonify
-
 from tools import create_tools
 from flask_cors import CORS
-from utils import create_agent, call_agent
+from utils import call_agent, create_graph
 from heavyai import connect
-from db_config import HEAVY_USER, HEAVY_PROTOCOL, HEAVY_DBNAME, HEAVY_HOST, HEAVY_PASSWORD, HEAVY_PORT, URI
-import sqlalchemy
-from sqlalchemy import create_engine
-from langchain_community.utilities.sql_database import SQLDatabase
-import pandas as pd
+
+# imports from other files
+from db_config import HEAVY_USER, HEAVY_PROTOCOL, HEAVY_DBNAME, HEAVY_HOST, HEAVY_PASSWORD, HEAVY_PORT
+from prompts import PROMPT
+
+
+
 app = Flask(__name__)
 CORS(app)
 
-# heavydb://<user>:<pass>@<host>:<port>/<db>?protocol=<protocol>
-# uri = "heavydb://" + HEAVY_USER + ":" + HEAVY_PASSWORD + "@" + HEAVY_HOST + ":" + HEAVY_PORT + "/" + HEAVY_DBNAME + "?protocol=" + HEAVY_PROTOCOL
-# print(uri)
-# engine = create_engine(url=uri)
-
-# # Create the engine
-# engine = SQLDatabase.from_uri(uri)
-
-# engine = create_engine(url=URI)
-
-
-# con = engine.connect()
-
-
-
-con = connect(
+try:
+    con = connect(
         user=HEAVY_USER, password=HEAVY_PASSWORD, host=HEAVY_HOST,
         port=HEAVY_PORT, dbname=HEAVY_DBNAME, protocol=HEAVY_PROTOCOL
     )
-# print(con)
-tools = create_tools(con)
-graph = create_agent(tools)
-config = {"configurable": {"thread_id": "1"}}
+    tools = create_tools(con)
+    graph = create_graph(PROMPT, tools)
+    logging.info("Database connection established and tools created successfully.")
+except Exception as e:
+    logging.error(f"Error connecting to database or creating tools/graph: {e}")
 
 
-# user_input="whats total number of crashes in 2020 in crashes all out"
-
-# result = call_agent(user_input, config, graph)
-
-# print(result)
+config = {
+    "configurable": {"thread_id": "1"}
+}
 
 
 @app.route('/api', methods=['GET'])
@@ -52,12 +38,14 @@ def chat():
     result = ''
 
     if user_input:
-        result = call_agent(user_input, config, graph)
-    
+        try:
+            result = call_agent(user_input, config, graph)
+            logging.info(f"Agent called successfully with input: {user_input}")
+        except Exception as e:
+            logging.error(f"Error during agent call: {e}")
+            result = "An error occurred while processing your request."
 
-    print(f"User Input: {user_input}, Response: {result}")
-
-
+    logging.debug(f"User Input: {user_input}, Response: {result}")
     return jsonify({"user_input": user_input, "response": result})
 
 @app.route('/', methods=['GET'])
@@ -65,7 +53,4 @@ def home():
     return jsonify({"user_input": "Hello Chatbot"})
 
 if __name__ == '__main__':
-    # app.run( port=80, debug=True)
     app.run(debug=True)
-
-
