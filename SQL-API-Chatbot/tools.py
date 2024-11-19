@@ -74,7 +74,7 @@ def create_tools(con):
     get_schema_tool = StructuredTool.from_function(
         func=get_schema,
         name="get_schema_tool",
-        description="Use this tool to get the schema for specific tables in the database",
+        description="Use this tool to get the schema for one table in the database",
     )
     query_tool = StructuredTool.from_function(
         func=execute_query,
