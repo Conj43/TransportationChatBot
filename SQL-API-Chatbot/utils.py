@@ -36,28 +36,26 @@ CREATE TABLE IF NOT EXISTS messages (
     conversation_id TEXT,
     message TEXT,
     role TEXT,
-    state TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )
 ''')
 conn.commit()
 
 # saving messages and state
-def save_message(user_id: str, conversation_id: str, message: str, role: str, state: dict):
-    # cast as string
-    serialized_state = str(state) if state else ""  
+def save_message(user_id: str, conversation_id: str, message: str, role: str):
+    # cast as string  
 
     cursor.execute('''
-    INSERT INTO messages (user_id, conversation_id, message, role, state)
-    VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, conversation_id, message, role, serialized_state))
+    INSERT INTO messages (user_id, conversation_id, message, role)
+    VALUES (?, ?, ?, ?)
+    ''', (user_id, conversation_id, message, role))
     conn.commit()
 
     # only keep 20 most recent messages
     cursor.execute('''
     DELETE FROM messages WHERE id IN (
         SELECT id FROM messages WHERE conversation_id = ?
-        ORDER BY timestamp DESC LIMIT 1 OFFSET 19
+        ORDER BY timestamp DESC LIMIT 1 OFFSET 24
     )
     ''', (conversation_id,))
     conn.commit()
@@ -66,12 +64,12 @@ def save_message(user_id: str, conversation_id: str, message: str, role: str, st
 # retrieve messages from user id and conversation id
 def retrieve_messages(user_id: str, conversation_id: str):
     cursor.execute('''
-    SELECT role, message, state FROM messages
+    SELECT role, message FROM messages
     WHERE user_id = ? AND conversation_id = ?
     ORDER BY timestamp DESC
-    LIMIT 20
+    LIMIT 25
     ''', (user_id, conversation_id))
-    return [{"role": row[0], "content": row[1], "state": row[2]} for row in cursor.fetchall()]
+    return [{"role": row[0], "content": row[1]} for row in cursor.fetchall()]
 
 
 
@@ -114,9 +112,9 @@ def create_graph(system_message, tools):
         response = llm_with_tools.invoke(all_messages)
 
         if state["messages"]:
-            save_message(user_id, conversation_id, state["messages"][-1].content, "user", state)
+            save_message(user_id, conversation_id, state["messages"][-1].content, "user")
         if response.content:
-            save_message(user_id, conversation_id, response.content, "assistant", state)
+            save_message(user_id, conversation_id, response.content, "assistant")
 
         return {"messages": [response]}
 
