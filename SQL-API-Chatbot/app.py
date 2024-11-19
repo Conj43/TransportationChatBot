@@ -11,9 +11,6 @@ from db_config import HEAVY_USER, HEAVY_PROTOCOL, HEAVY_DBNAME, HEAVY_HOST, HEAV
 from prompts import PROMPT
 
 
-# from chat_memory import call_agent
-
-
 
 app = Flask(__name__)
 CORS(app)
@@ -24,30 +21,29 @@ try:
         port=HEAVY_PORT, dbname=HEAVY_DBNAME, protocol=HEAVY_PROTOCOL
     )
     tools = create_tools(con)
-    # graph = create_graph(PROMPT, tools)
-    config={}
+    graph = create_graph(PROMPT, tools)
     logging.info("Database connection established and tools created successfully.")
 except Exception as e:
     logging.error(f"Error connecting to database or creating tools/graph: {e}")
 
 
-
+config = {
+    "configurable": {"thread_id": "1"}
+}
 
 
 @app.route('/api', methods=['GET'])
 def chat():
     user_input = request.args.get('user_input', '') 
-    user_id = request.args.get('user_id', 'default_user') 
-    conversation_id = request.args.get('conversation_id', 'default_conversation') 
     result = ''
 
     if user_input:
         try:
-            result = call_agent(user_input, user_id, conversation_id, PROMPT, tools)
+            result = call_agent(user_input, config, graph)
             logging.info(f"Agent called successfully with input: {user_input}")
         except Exception as e:
             logging.error(f"Error during agent call: {e}")
-            result = f"Error during agent call: {e}"
+            result = "An error occurred while processing your request."
 
     logging.debug(f"User Input: {user_input}, Response: {result}")
     return jsonify({"user_input": user_input, "response": result})
